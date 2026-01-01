@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, "*" ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: CPU tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Code checkout
+        uses: actions/checkout@v4
+
+      - name: Rust toolchain installation
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          rust-version: stable
+          components: clippy, rustfmt
+
+      - name: Cargo registy cache and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run tests
+        run: cargo test --workspace --all-features
+
+      - name: Clippy (linty)
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Code formatting
+        run: cargo fmt -- --check
