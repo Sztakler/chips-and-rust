@@ -36,17 +36,35 @@ impl Emu {
     }
 }
 
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    fn test_initialization() {
+        let emu = Emu::new();
+
+        assert_eq!(emu.pc, 0x200);
+        assert!(emu.v_reg.iter().all(|&v| v == 0));
+        assert_eq!(emu.i_reg, 0);
+        assert_eq!(emu.sp, 0);
+        assert!(emu.stack.iter().all(|&v| v == 0));
+        assert!(emu.keys.iter().all(|&k| !k));
+        assert!(emu.screen.iter().all(|&pixel| !pixel));
+    }
+
+    #[test]
+    fn test_ram_initially_zero() {
+        let emu = Emu::new();
+
+        assert!(emu.ram.iter().all(|&byte| byte == 0));
+    }
+
+    #[test]
+    fn test_screen_dimensions() {
+        let emu = Emu::new();
+
+        assert_eq!(emu.screen.len(), SCREEN_HEIGHT * SCREEN_WIDTH);
+        assert_eq!(emu.screen.len(), 2048);
     }
 }
