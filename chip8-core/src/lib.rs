@@ -89,12 +89,12 @@ impl Emu {
         self.stack[self.sp as usize]
     }
 
-    #[allow(unused_variables)]
     pub fn tick(&mut self) {
         // Fetch
         let op = self.fetch();
         // Decode
         // Execute
+        self.execute(op);
         todo!();
     }
 
@@ -104,6 +104,18 @@ impl Emu {
         let op = (higher_byte << 8) | lower_byte;
         self.pc += 2;
         op
+    }
+
+    fn execute(&mut self, op: u16) {
+        let digit1 = (op & 0xF000) >> 12;
+        let digit2 = (op & 0x0F00) >> 8;
+        let digit3 = (op & 0x00F0) >> 4;
+        let digit4 = op & 0x000F;
+
+        #[allow(clippy::match_single_binding)]
+        match (digit1, digit2, digit3, digit4) {
+            (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
+        }
     }
 
     #[allow(dead_code)]
