@@ -1,3 +1,5 @@
+use std::fmt::LowerExp;
+
 pub const SCREEN_WIDTH: usize = 64;
 pub const SCREEN_HEIGHT: usize = 32;
 const RAM_SIZE: usize = 4 * 1024;
@@ -98,7 +100,11 @@ impl Emu {
     }
 
     fn fetch(&mut self) -> u16 {
-        todo!();
+        let higher_byte = self.ram[self.pc as usize] as u16;
+        let lower_byte = self.ram[(self.pc + 1) as usize] as u16;
+        let op = (higher_byte << 8) | lower_byte;
+        self.pc += 2;
+        op
     }
 }
 
