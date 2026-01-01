@@ -1,5 +1,3 @@
-use std::fmt::LowerExp;
-
 pub const SCREEN_WIDTH: usize = 64;
 pub const SCREEN_HEIGHT: usize = 32;
 const RAM_SIZE: usize = 4 * 1024;
@@ -91,6 +89,7 @@ impl Emu {
         self.stack[self.sp as usize]
     }
 
+    #[allow(unused_variables)]
     pub fn tick(&mut self) {
         // Fetch
         let op = self.fetch();
@@ -105,6 +104,20 @@ impl Emu {
         let op = (higher_byte << 8) | lower_byte;
         self.pc += 2;
         op
+    }
+
+    #[allow(dead_code)]
+    fn tick_timers(&mut self) {
+        if self.dt > 0 {
+            self.dt -= 1;
+        }
+        if self.st > 0 {
+            if self.st == 1 {
+                //BEEP
+                todo!();
+            }
+            self.st -= 1;
+        }
     }
 }
 
