@@ -6,6 +6,7 @@ const STACK_SIZE: usize = 16;
 const NUM_KEYS: usize = 16;
 const START_ADDR: u16 = 0x200;
 
+#[allow(dead_code)]
 pub struct Emu {
     pc: u16,
     ram: [u8; RAM_SIZE],
@@ -17,6 +18,12 @@ pub struct Emu {
     keys: [bool; NUM_KEYS],
     dt: u8,
     st: u8,
+}
+
+impl Default for Emu {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Emu {
