@@ -95,7 +95,7 @@ impl Emu {
         // Decode
         // Execute
         self.execute(op);
-        todo!();
+        self.tick_timers();
     }
 
     fn fetch(&mut self) -> u16 {
@@ -346,7 +346,7 @@ mod tests {
         let mut emu = Emu::new();
 
         // Some unimplemented opcode
-        let op: u16 = 0x4123;
+        let op: u16 = 0xFFFF;
 
         // Expected panic with specific communicate
         emu.execute(op);
@@ -437,5 +437,182 @@ mod tests {
         emu.execute(0xB000);
 
         assert_eq!(emu.pc, 0x000);
+    }
+
+    #[test]
+    fn test_opcode_4xnn_skip_when_vx_not_equal_nn() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0x4B;
+        emu.ram[0x201] = 0x77;
+
+        emu.v_reg[0xB] = 0x42;
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x200 + 4); // +2 (fetch) and +2 (skip)
+    }
+
+    #[test]
+    fn test_opcode_4xnn_no_skip_when_vs_equal_nn() {
+        let mut emu = Emu::new();
+        emu.pc = 0x300;
+        emu.v_reg[0x4] = 0xAB;
+
+        emu.execute(0x45AB);
+
+        assert_eq!(emu.pc, 0x300 + 2); // normal jump
+    }
+
+    #[test]
+    fn test_opcode_5xy0_skip_when_vx_equal_vy() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0x51;
+        emu.ram[0x201] = 0xA0;
+
+        emu.v_reg[0x1] = 0xFE;
+        emu.v_reg[0xA] = 0xFE;
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x200 + 4); // +2 (fetch), +2 (skip)
+    }
+
+    #[test]
+    fn test_opcode_5xy0_skip_when_vx_not_equal_vy() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0x51;
+        emu.ram[0x201] = 0xA0;
+
+        emu.v_reg[0x1] = 0x21;
+        emu.v_reg[0xA] = 0x37;
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x200 + 2);
+    }
+
+    #[test]
+    fn test_opcode_9xy0_no_skip_when_vx_equal_vy() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0x9B;
+        emu.ram[0x201] = 0xC0;
+
+        emu.v_reg[0xB] = 0x21;
+        emu.v_reg[0xC] = 0x21;
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x200 + 2);
+    }
+
+    #[test]
+    fn test_opcode_9xy0_skip_when_vx_not_equal_vy() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0x99;
+        emu.ram[0x201] = 0x80;
+
+        emu.v_reg[0x9] = 0x21;
+        emu.v_reg[0x8] = 0x37;
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x200 + 4);
+    }
+
+    #[test]
+    fn test_opcode_ex9e_skip_when_key_pressed() {
+        let mut emu = Emu::new();
+        emu.pc = 0x400;
+
+        emu.ram[0x400] = 0xE4;
+        emu.ram[0x401] = 0x9E;
+
+        emu.v_reg[0x4] = 0x9;
+        emu.keys[9] = true;
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x400 + 4);
+    }
+
+    #[test]
+    fn test_opcode_ex9e_no_skip_when_key_not_pressed() {
+        let mut emu = Emu::new();
+        emu.pc = 0x300;
+
+        emu.ram[0x300] = 0xED;
+        emu.ram[0x301] = 0x9E;
+
+        emu.v_reg[0xD] = 0x2;
+        emu.keys[2] = false;
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x300 + 2);
+    }
+
+    #[test]
+    fn test_opcode_ex9e_no_skip_when_key_value_out_of_range() {
+        let mut emu = Emu::new();
+        emu.pc = 0x400;
+
+        emu.ram[0x400] = 0xE1;
+        emu.ram[0x401] = 0x9E;
+
+        emu.v_reg[0x1] = 0xFF; // out of range 0-15
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x400 + 2);
+    }
+
+    #[test]
+    fn test_opcode_fx0a_stores_key_when_pressed() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0xF3;
+        emu.ram[0x201] = 0x0A;
+
+        emu.keys[0xC] = true;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x3], 0xC);
+        assert_eq!(emu.pc, 0x200 + 2);
+    }
+
+    #[test]
+    fn test_opcode_fx0a_repeats_when_no_key_pressed() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0xF8;
+        emu.ram[0x201] = 0x0A;
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x200); // reversed by 2
+    }
+
+    #[test]
+    fn test_opcode_fx0a_takes_first_pressed_key() {
+        let mut emu = Emu::new();
+        emu.keys[5] = true;
+        emu.keys[11] = true;
+
+        emu.execute(0xFE0A); // store to V14
+
+        assert_eq!(emu.v_reg[0xE], 5); // takes key with lowest index
     }
 }
