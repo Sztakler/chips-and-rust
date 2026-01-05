@@ -112,6 +112,7 @@ impl Emu {
         let digit3 = (op & 0x00F0) >> 4;
         let digit4 = op & 0x000F;
 
+        // Instructions implementation based on http://devernay.free.fr/hacks/chip8/C8TECH10.HTM and https://aquova.net/emudev/chip8/
         #[allow(clippy::match_single_binding)]
         match (digit1, digit2, digit3, digit4) {
             // 0000 -- NOP
@@ -136,7 +137,7 @@ impl Emu {
                 self.push(self.pc);
                 self.pc = nnn;
             }
-            // 3XNN -- Skip new if VX=NN
+            // 3XNN -- Skip new if VX = NN
             (3, _, _, _) => {
                 let x = digit2 as usize;
                 let nn = (op & 0x00FF) as u8;
@@ -148,6 +149,52 @@ impl Emu {
             (0xB, _, _, _) => {
                 let nnn = op & 0x0FFF;
                 self.pc = (self.v_reg[0] as u16) + nnn;
+            }
+            // 4XNN -- Skip next instruction if VX != NN
+            (4, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = op & 0x00FF;
+
+                if (self.v_reg[x] as u16) != nn {
+                    self.pc += 2;
+                }
+            }
+            // 5XY0 -- Skip next instruction if VX = VY
+            (5, _, _, 0) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                if self.v_reg[x] == self.v_reg[y] {
+                    self.pc += 2;
+                }
+            }
+            // 9XY0 -- Skip next instruction if Vx != VY
+            (9, _, _, 0) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                if self.v_reg[x] != self.v_reg[y] {
+                    self.pc += 2;
+                }
+            }
+            // EX9E -- Skip next instruction if key with the value of VX is pressed
+            (0xE, _, 9, 0xE) => {
+                let x = digit2 as usize;
+                let key_val = self.v_reg[x] as usize;
+
+                if key_val < NUM_KEYS && self.keys[key_val] {
+                    self.pc += 2;
+                }
+            }
+            // FX0A -- Wait for key
+            (0xF, _, 0, 0xA) => {
+                let x = digit2 as usize;
+
+                if let Some(key) = (0..self.keys.len()).find(|&i| self.keys[i]) {
+                    self.v_reg[x] = key as u8;
+                } else {
+                    self.pc -= 2; // Loop until a key is pressed
+                }
             }
             (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
         }
