@@ -114,6 +114,41 @@ impl Emu {
 
         #[allow(clippy::match_single_binding)]
         match (digit1, digit2, digit3, digit4) {
+            // 0000 -- NOP
+            (0, 0, 0, 0) => (),
+            // 00E0 -- CLS
+            (0, 0, 0xE, 0) => {
+                self.screen = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
+            }
+            // 00EE -- RET
+            (0, 0, 0xE, 0xE) => {
+                let ret_addr = self.pop();
+                self.pc = ret_addr;
+            }
+            // 1NNN -- Jump
+            (1, _, _, _) => {
+                let nnn = op & 0x0FFF;
+                self.pc = nnn;
+            }
+            // 2NNN -- Call
+            (2, _, _, _) => {
+                let nnn = op & 0x0FFF;
+                self.push(self.pc);
+                self.pc = nnn;
+            }
+            // 3XNN -- Skip new if VX=NN
+            (3, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0x00FF) as u8;
+                if self.v_reg[x] == nn {
+                    self.pc += 2;
+                }
+            }
+            // BNNN -- Jump to V0 + NNN
+            (0xB, _, _, _) => {
+                let nnn = op & 0x0FFF;
+                self.pc = (self.v_reg[0] as u16) + nnn;
+            }
             (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
         }
     }
@@ -264,9 +299,96 @@ mod tests {
         let mut emu = Emu::new();
 
         // Some unimplemented opcode
-        let op: u16 = 0x1234;
+        let op: u16 = 0x4123;
 
         // Expected panic with specific communicate
         emu.execute(op);
+    }
+
+    // Opcodes
+
+    #[test]
+    fn test_opcode_0000_nop() {
+        let mut emu = Emu::new();
+        emu.pc = 0x300;
+
+        emu.execute(0x0000);
+
+        assert_eq!(emu.pc, 0x300);
+    }
+
+    #[test]
+    fn test_opcode_00e0_cls() {
+        let mut emu = Emu::new();
+
+        emu.screen[0] = true;
+        emu.screen[100] = true;
+        emu.screen[2047] = true;
+
+        emu.execute(0x00E0);
+
+        assert!(emu.screen.iter().all(|&pixel| !pixel));
+        assert_eq!(emu.pc, START_ADDR);
+    }
+
+    #[test]
+    fn test_opcode_00ee_ret() {
+        let mut emu = Emu::new();
+
+        emu.push(0x456);
+        emu.pc = 0x300;
+
+        emu.execute(0x00EE);
+
+        assert_eq!(emu.pc, 0x456);
+        assert_eq!(emu.sp, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "attempt to subtract with overflow")]
+    fn test_opcode_00ee_ret_empty_stack() {
+        let mut emu = Emu::new();
+        emu.execute(0x00EE);
+    }
+
+    #[test]
+    fn test_opcode_1nnn_jump() {
+        let mut emu = Emu::new();
+
+        emu.execute(0x1ABC);
+
+        assert_eq!(emu.pc, 0xABC);
+    }
+
+    #[test]
+    fn test_opcode_2nnn_call() {
+        let mut emu = Emu::new();
+        emu.pc = 0x300;
+
+        emu.execute(0x2DEF);
+
+        assert_eq!(emu.pc, 0xDEF);
+        assert_eq!(emu.sp, 1);
+        assert_eq!(emu.pop(), 0x300);
+    }
+
+    #[test]
+    fn test_opcode_bnnn_jump_v0_offset() {
+        let mut emu = Emu::new();
+        emu.v_reg[0] = 0x50;
+
+        emu.execute(0xB123);
+
+        assert_eq!(emu.pc, 0x173);
+    }
+
+    #[test]
+    fn test_opcode_bnnn_jump_v0_offset_zero() {
+        let mut emu = Emu::new();
+        emu.v_reg[0] = 0x00;
+
+        emu.execute(0xB000);
+
+        assert_eq!(emu.pc, 0x000);
     }
 }
