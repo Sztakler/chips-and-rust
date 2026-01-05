@@ -115,7 +115,7 @@ impl Emu {
         #[allow(clippy::match_single_binding)]
         match (digit1, digit2, digit3, digit4) {
             // 0000 -- NOP
-            (0, 0, 0, 0) => return,
+            (0, 0, 0, 0) => (),
             // 00E0 -- CLS
             (0, 0, 0xE, 0) => {
                 self.screen = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
