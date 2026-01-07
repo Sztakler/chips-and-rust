@@ -1,3 +1,5 @@
+use rand::Rng;
+
 pub const SCREEN_WIDTH: usize = 64;
 pub const SCREEN_HEIGHT: usize = 32;
 const RAM_SIZE: usize = 4 * 1024;
@@ -263,9 +265,31 @@ impl Emu {
                 let x = digit2 as usize;
                 self.dt = self.v_reg[x];
             }
-            // FX18
-            // CXKK (RND)
-            // FX33 (BCD)
+            // FX18 -- Sets sound timer to VX
+            (0xF, _, 1, 8) => {
+                let x = digit2 as usize;
+                self.st = self.v_reg[x];
+            }
+            // CXKK (RND) -- Set VX to random byte AND KK
+            (0xC, _, _, _) => {
+                let x = digit2 as usize;
+                let kk = (op & 0x00FF) as u8;
+
+                let mut rng = rand::rng();
+                let random_byte: u8 = rng.random_range(0..=255);
+
+                self.v_reg[x] = random_byte & kk;
+            }
+            // FX33 (BCD) -- Store VX as BCD (Binary Coded Decimal) in the I
+            (0xF, _, 3, 3) => {
+                let x = digit2 as usize;
+                let vx = self.v_reg[x];
+                let addr = self.i_reg as usize;
+
+                self.ram[addr] = vx / 100;
+                self.ram[addr + 1] = (vx / 10) % 10;
+                self.ram[addr + 2] = vx % 10;
+            }
             // FX55
             // FX65
             (_, _, _, _) => unimplemented!("Unimplemented opcode: {:04X}", op),
@@ -1341,7 +1365,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dxyn_draw_no_collision() {
+    fn test_opcode_dxyn_draw_no_collision() {
         let mut emu = Emu::new();
         emu.i_reg = 0x50;
         emu.ram[0x50] = 0b1111_0000;
@@ -1368,7 +1392,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dxyn_draw_with_collision() {
+    fn test_opcode_dxyn_draw_with_collision() {
         let mut emu = Emu::new();
         emu.i_reg = 0x50;
         emu.ram[0x50] = 0b1010_1010;
@@ -1391,7 +1415,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dxyn_wrap_horizontal() {
+    fn test_opcode_dxyn_wrap_horizontal() {
         let mut emu = Emu::new();
         emu.i_reg = 0x50;
         emu.ram[0x50] = 0b0000_1111; // bits 4-7 = 1 → col 4,5,6,7
@@ -1420,7 +1444,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dxyn_wrap_vertical() {
+    fn test_opcode_dxyn_wrap_vertical() {
         let mut emu = Emu::new();
         emu.i_reg = 0x50;
         emu.ram[0x50] = 0xFF;
@@ -1448,7 +1472,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dxyn_wrap_both_axes() {
+    fn test_opcode_dxyn_wrap_both_axes() {
         let mut emu = Emu::new();
         emu.i_reg = 0x50;
         emu.ram[0x50] = 0b0100_0000;
@@ -1464,7 +1488,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dxyn_multiple_collisions_vf_still_1() {
+    fn test_opcode_dxyn_multiple_collisions_vf_still_1() {
         let mut emu = Emu::new();
         emu.i_reg = 0x50;
         emu.ram[0x50] = 0xFF;
@@ -1478,7 +1502,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dxyn_zero_height_no_draw() {
+    fn test_opcode_dxyn_zero_height_no_draw() {
         let mut emu = Emu::new();
         emu.i_reg = 0x50;
         emu.ram[0x50] = 0xFF;
@@ -1490,7 +1514,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dxyn_partial_sprite_offscreen() {
+    fn test_opcode_dxyn_partial_sprite_offscreen() {
         let mut emu = Emu::new();
         emu.i_reg = 0x50;
         emu.ram[0x50] = 0b1111_1111;
@@ -1507,7 +1531,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fx07_load_dt_basic() {
+    fn test_opcode_fx07_load_dt_basic() {
         let mut emu = Emu::new();
         emu.dt = 42;
         emu.execute(0xF207);
@@ -1515,7 +1539,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fx07_load_dt_zero() {
+    fn test_opcode_fx07_load_dt_zero() {
         let mut emu = Emu::new();
         emu.dt = 0;
         emu.execute(0xF007);
@@ -1523,7 +1547,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fx07_load_dt_max() {
+    fn test_opcode_fx07_load_dt_max() {
         let mut emu = Emu::new();
         emu.dt = 255;
         emu.execute(0xFF07);
@@ -1531,7 +1555,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fx07_different_registers() {
+    fn test_opcode_fx07_different_registers() {
         let mut emu = Emu::new();
         emu.dt = 100;
         emu.execute(0xF107);
@@ -1541,7 +1565,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fx07_with_tick_cycle() {
+    fn test_opcode_fx07_with_tick_cycle() {
         let mut emu = Emu::new();
         emu.dt = 5;
         emu.ram[0x200] = 0xF3;
@@ -1554,7 +1578,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fx07_multiple_in_sequence() {
+    fn test_opcode_fx07_multiple_in_sequence() {
         let mut emu = Emu::new();
         emu.dt = 60;
         emu.ram[0x200] = 0xF1;
@@ -1571,7 +1595,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fx15_set_dt_basic() {
+    fn test_opcode_fx15_set_dt_basic() {
         let mut emu = Emu::new();
         emu.v_reg[0x3] = 42;
         emu.execute(0xF315);
@@ -1579,7 +1603,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fx15_set_dt_zero() {
+    fn test_opcode_fx15_set_dt_zero() {
         let mut emu = Emu::new();
         emu.v_reg[0x0] = 0;
         emu.execute(0xF015);
@@ -1587,7 +1611,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fx15_set_dt_max() {
+    fn test_opcode_fx15_set_dt_max() {
         let mut emu = Emu::new();
         emu.v_reg[0xF] = 255;
         emu.execute(0xFF15);
@@ -1595,7 +1619,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fx15_different_registers() {
+    fn test_opcode_fx15_different_registers() {
         let mut emu = Emu::new();
         emu.v_reg[0x1] = 100;
         emu.v_reg[0xA] = 200;
@@ -1606,7 +1630,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fx15_with_tick_cycle() {
+    fn test_opcode_fx15_with_tick_cycle() {
         let mut emu = Emu::new();
         emu.v_reg[0x4] = 10;
         emu.ram[0x200] = 0xF4;
@@ -1620,7 +1644,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fx15_multiple_in_sequence() {
+    fn test_opcode_fx15_multiple_in_sequence() {
         let mut emu = Emu::new();
         emu.ram[0x200] = 0xF1;
         emu.ram[0x201] = 0x15;
@@ -1632,7 +1656,139 @@ mod tests {
         emu.tick();
         assert_eq!(emu.dt, 59); // tick decrements dt
         emu.tick();
-        assert_eq!(emu.dt, 29); // tick decrements dt
+        assert_eq!(emu.dt, 29);
         assert_eq!(emu.pc, 0x204);
+    }
+
+    #[test]
+    fn test_opcode_cxkk_rand_basic() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x0] = 0;
+        emu.execute(0xC012);
+        assert!(emu.v_reg[0x0] <= 0x12);
+        assert_eq!(emu.v_reg[0x0] & 0xED, 0);
+    }
+
+    #[test]
+    fn test_opcode_cxkk_rand_zero_mask() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x1] = 0xFF;
+        emu.execute(0xC100);
+        assert_eq!(emu.v_reg[0x1], 0);
+    }
+
+    #[test]
+    fn test_opcode_cxkk_rand_full_mask() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x2] = 0;
+        emu.execute(0xC2FF);
+        assert_eq!(emu.v_reg[0x2], emu.v_reg[0x2]);
+    }
+
+    #[test]
+    fn test_opcode_cxkk_rand_different_registers() {
+        let mut emu = Emu::new();
+        emu.execute(0xC388);
+        assert!(emu.v_reg[0x3] <= 0x88);
+        emu.execute(0xCA55);
+        assert!(emu.v_reg[0xA] <= 0x55);
+    }
+
+    #[test]
+    fn test_opcode_cxkk_rand_multiple_times_same_register() {
+        let mut emu = Emu::new();
+        let first = {
+            emu.execute(0xC4AA);
+            emu.v_reg[0x4]
+        };
+        let second = {
+            emu.v_reg[0x4] = 0;
+            emu.execute(0xC4AA);
+            emu.v_reg[0x4]
+        };
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn test_opcode_cxkk_rand_with_tick_cycle() {
+        let mut emu = Emu::new();
+        emu.ram[0x200] = 0xC5;
+        emu.ram[0x201] = 0x3F;
+        emu.pc = 0x200;
+        emu.tick();
+        assert!(emu.v_reg[0x5] <= 0x3F);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_fx33_bcd_basic() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x5] = 123;
+        emu.i_reg = 0x300;
+        emu.execute(0xF533);
+        assert_eq!(emu.ram[0x300], 1);
+        assert_eq!(emu.ram[0x301], 2);
+        assert_eq!(emu.ram[0x302], 3);
+    }
+
+    #[test]
+    fn test_fx33_bcd_zero() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x0] = 0;
+        emu.i_reg = 0x400;
+        emu.execute(0xF033);
+        assert_eq!(emu.ram[0x400], 0);
+        assert_eq!(emu.ram[0x401], 0);
+        assert_eq!(emu.ram[0x402], 0);
+    }
+
+    #[test]
+    fn test_fx33_bcd_max_value() {
+        let mut emu = Emu::new();
+        emu.v_reg[0xF] = 255;
+        emu.i_reg = 0x500;
+        emu.execute(0xFF33);
+        assert_eq!(emu.ram[0x500], 2);
+        assert_eq!(emu.ram[0x501], 5);
+        assert_eq!(emu.ram[0x502], 5);
+    }
+
+    #[test]
+    fn test_fx33_bcd_single_digit() {
+        let mut emu = Emu::new();
+        emu.v_reg[0xA] = 7;
+        emu.i_reg = 0x600;
+        emu.execute(0xFA33);
+        assert_eq!(emu.ram[0x600], 0);
+        assert_eq!(emu.ram[0x601], 0);
+        assert_eq!(emu.ram[0x602], 7);
+    }
+
+    #[test]
+    fn test_fx33_bcd_ten() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x1] = 10;
+        emu.i_reg = 0x700;
+        emu.execute(0xF133);
+        assert_eq!(emu.ram[0x700], 0);
+        assert_eq!(emu.ram[0x701], 1);
+        assert_eq!(emu.ram[0x702], 0);
+    }
+
+    #[test]
+    fn test_fx33_bcd_multiple_in_sequence() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x800;
+        emu.v_reg[0x2] = 45;
+        emu.v_reg[0x3] = 67;
+        emu.execute(0xF233);
+        assert_eq!(emu.ram[0x800], 0);
+        assert_eq!(emu.ram[0x801], 4);
+        assert_eq!(emu.ram[0x802], 5);
+        emu.i_reg = 0x900;
+        emu.execute(0xF333);
+        assert_eq!(emu.ram[0x900], 0);
+        assert_eq!(emu.ram[0x901], 6);
+        assert_eq!(emu.ram[0x902], 7);
     }
 }
