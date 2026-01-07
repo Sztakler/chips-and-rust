@@ -90,10 +90,7 @@ impl Emu {
     }
 
     pub fn tick(&mut self) {
-        // Fetch
         let op = self.fetch();
-        // Decode
-        // Execute
         self.execute(op);
         self.tick_timers();
     }
@@ -112,32 +109,25 @@ impl Emu {
         let digit3 = (op & 0x00F0) >> 4;
         let digit4 = op & 0x000F;
 
-        // Instructions implementation based on http://devernay.free.fr/hacks/chip8/C8TECH10.HTM and https://aquova.net/emudev/chip8/
         #[allow(clippy::match_single_binding)]
         match (digit1, digit2, digit3, digit4) {
-            // 0000 -- NOP
             (0, 0, 0, 0) => (),
-            // 00E0 -- CLS
             (0, 0, 0xE, 0) => {
                 self.screen = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
             }
-            // 00EE -- RET
             (0, 0, 0xE, 0xE) => {
                 let ret_addr = self.pop();
                 self.pc = ret_addr;
             }
-            // 1NNN -- Jump
             (1, _, _, _) => {
                 let nnn = op & 0x0FFF;
                 self.pc = nnn;
             }
-            // 2NNN -- Call
             (2, _, _, _) => {
                 let nnn = op & 0x0FFF;
                 self.push(self.pc);
                 self.pc = nnn;
             }
-            // 3XNN -- Skip new if VX = NN
             (3, _, _, _) => {
                 let x = digit2 as usize;
                 let nn = (op & 0x00FF) as u8;
@@ -145,85 +135,98 @@ impl Emu {
                     self.pc += 2;
                 }
             }
-            // BNNN -- Jump to V0 + NNN
             (0xB, _, _, _) => {
                 let nnn = op & 0x0FFF;
                 self.pc = (self.v_reg[0] as u16) + nnn;
             }
-            // 4XNN -- Skip next instruction if VX != NN
             (4, _, _, _) => {
                 let x = digit2 as usize;
                 let nn = op & 0x00FF;
-
                 if (self.v_reg[x] as u16) != nn {
                     self.pc += 2;
                 }
             }
-            // 5XY0 -- Skip next instruction if VX = VY
             (5, _, _, 0) => {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
-
                 if self.v_reg[x] == self.v_reg[y] {
                     self.pc += 2;
                 }
             }
-            // 9XY0 -- Skip next instruction if Vx != VY
             (9, _, _, 0) => {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
-
                 if self.v_reg[x] != self.v_reg[y] {
                     self.pc += 2;
                 }
             }
-            // EX9E -- Skip next instruction if key with the value of VX is pressed
             (0xE, _, 9, 0xE) => {
                 let x = digit2 as usize;
                 let key_val = self.v_reg[x] as usize;
-
                 if key_val < NUM_KEYS && self.keys[key_val] {
                     self.pc += 2;
                 }
             }
-            // FX0A -- Wait for key
             (0xF, _, 0, 0xA) => {
                 let x = digit2 as usize;
-
                 if let Some(key) = (0..self.keys.len()).find(|&i| self.keys[i]) {
                     self.v_reg[x] = key as u8;
                 } else {
-                    self.pc -= 2; // Loop until a key is pressed
+                    self.pc -= 2;
                 }
             }
-            // 6XKK -- Set VX = KK
             (6, _, _, _) => {
                 let x = digit2 as usize;
                 let kk = (op & 0x00FF) as u8;
-
                 self.v_reg[x] = kk;
             }
-            // 7XKK -- Set VX = VX + KK
             (7, _, _, _) => {
                 let x = digit2 as usize;
                 let kk = (op & 0x00FF) as u8;
-
                 self.v_reg[x] = self.v_reg[x].wrapping_add(kk);
             }
-            // 8XY0 -- Set VX = VY
-            (8, _, _, 0) => {
+            (8, _, _, n) => {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
+                let vx = self.v_reg[x];
+                let vy = self.v_reg[y];
 
-                self.v_reg[x] = self.v_reg[y];
+                match n {
+                    0 => self.v_reg[x] = vy,
+                    1 => self.v_reg[x] |= vy,
+                    2 => self.v_reg[x] &= vy,
+                    3 => self.v_reg[x] ^= vy,
+                    4 => {
+                        let sum = vx as u16 + vy as u16;
+                        self.v_reg[x] = sum as u8;
+                        self.v_reg[0xF] = if sum > 0xFF { 1 } else { 0 };
+                    }
+                    5 => {
+                        self.v_reg[0xF] = if vx >= vy { 1 } else { 0 };
+                        self.v_reg[x] = vx.wrapping_sub(vy);
+                    }
+                    6 => {
+                        self.v_reg[x] = vy;
+                        self.v_reg[0xF] = vy & 1;
+                        self.v_reg[x] >>= 1;
+                    }
+                    7 => {
+                        self.v_reg[0xF] = if vy >= vx { 1 } else { 0 };
+                        self.v_reg[x] = vy.wrapping_sub(vx);
+                    }
+                    0xE => {
+                        self.v_reg[x] = vy;
+                        self.v_reg[0xF] = (vy >> 7) & 1;
+                        self.v_reg[x] <<= 1;
+                    }
+                    _ => unimplemented!("Unimplemented 8XY{} opcode", n),
+                }
             }
-            // ANNN -- I = NNN
             (0xA, _, _, _) => {
                 let nnn = op & 0x0FFF;
-
                 self.i_reg = nnn;
             }
-            (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
+            (_, _, _, _) => unimplemented!("Unimplemented opcode: {:04X}", op),
         }
     }
 
@@ -234,7 +237,6 @@ impl Emu {
         }
         if self.st > 0 {
             if self.st == 1 {
-                //BEEP
                 // TODO: Emit beep sound
             }
             self.st -= 1;
@@ -1009,5 +1011,255 @@ mod tests {
         emu.tick();
         assert_eq!(emu.i_reg, 0x333);
         assert_eq!(emu.pc, 0x206);
+    }
+
+    #[test]
+    fn test_opcode_8xy1_or_basic() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x81;
+        emu.ram[0x201] = 0x21;
+        emu.v_reg[0x1] = 0b1010_1010;
+        emu.v_reg[0x2] = 0b1100_1100;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x1], 0b1110_1110);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy1_or_no_change_when_zero() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x83;
+        emu.ram[0x201] = 0x21;
+        emu.v_reg[0x3] = 0x00;
+        emu.v_reg[0x2] = 0x00;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x3], 0x00);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy2_and_basic() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x84;
+        emu.ram[0x201] = 0x22;
+        emu.v_reg[0x4] = 0b1111_0000;
+        emu.v_reg[0x2] = 0b1010_1010;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x4], 0b1010_0000);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy2_and_all_zero() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x85;
+        emu.ram[0x201] = 0x22;
+        emu.v_reg[0x5] = 0xFF;
+        emu.v_reg[0x2] = 0x00;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x5], 0x00);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy3_xor_basic() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x86;
+        emu.ram[0x201] = 0x23;
+        emu.v_reg[0x6] = 0b1010_1010;
+        emu.v_reg[0x2] = 0b1111_0000;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x6], 0b0101_1010);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy3_xor_identity() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x87;
+        emu.ram[0x201] = 0x23;
+        emu.v_reg[0x7] = 0xAB;
+        emu.v_reg[0x2] = 0xAB;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x7], 0x00);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy4_add_no_carry() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x88;
+        emu.ram[0x201] = 0x44;
+        emu.v_reg[0x8] = 0x50;
+        emu.v_reg[0x4] = 0x30;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x8], 0x80);
+        assert_eq!(emu.v_reg[0xF], 0);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy4_add_with_carry() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x89;
+        emu.ram[0x201] = 0x44;
+        emu.v_reg[0x9] = 0xFF;
+        emu.v_reg[0x4] = 0x01;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x9], 0x00);
+        assert_eq!(emu.v_reg[0xF], 1);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy5_sub_no_borrow() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x8A;
+        emu.ram[0x201] = 0x55;
+        emu.v_reg[0xA] = 0x70;
+        emu.v_reg[0x5] = 0x20;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xA], 0x50);
+        assert_eq!(emu.v_reg[0xF], 1);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy5_sub_with_borrow() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x8B;
+        emu.ram[0x201] = 0x55;
+        emu.v_reg[0xB] = 0x10;
+        emu.v_reg[0x5] = 0x20;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xB], 0xF0); // 0x10 - 0x20 = 0xF0 (wrap)
+        assert_eq!(emu.v_reg[0xF], 0);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy6_shr_lsb_1() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x8C;
+        emu.ram[0x201] = 0x06;
+        emu.v_reg[0xC] = 0x00;
+        emu.v_reg[0x0] = 0b1010_1101; // LSB = 1
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xC], 0b0101_0110); // przesunięte o 1
+        assert_eq!(emu.v_reg[0xF], 1);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy6_shr_lsb_0() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x8D;
+        emu.ram[0x201] = 0x06;
+        emu.v_reg[0xD] = 0x00;
+        emu.v_reg[0x0] = 0b1010_1100; // LSB = 0
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xD], 0b0101_0110);
+        assert_eq!(emu.v_reg[0xF], 0);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy7_subn_no_borrow() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x8E;
+        emu.ram[0x201] = 0x77;
+        emu.v_reg[0xE] = 0x20;
+        emu.v_reg[0x7] = 0x70;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xE], 0x50); // Vy - Vx
+        assert_eq!(emu.v_reg[0xF], 1);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy7_subn_with_borrow() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x8E;
+        emu.ram[0x201] = 0x77;
+        emu.v_reg[0xE] = 0x70;
+        emu.v_reg[0x7] = 0x20;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xE], 0xB0); // Vy - Vx = 0x20 - 0x70 = wrap
+        assert_eq!(emu.v_reg[0xF], 0);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xye_shl_msb_1() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x81;
+        emu.ram[0x201] = 0x0E;
+        emu.v_reg[0x1] = 0x00;
+        emu.v_reg[0x0] = 0b1000_0001; // MSB = 1
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x1], 0b0000_0010);
+        assert_eq!(emu.v_reg[0xF], 1);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xye_shl_msb_0() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x82;
+        emu.ram[0x201] = 0x0E;
+        emu.v_reg[0x2] = 0x00;
+        emu.v_reg[0x0] = 0b0111_1111; // MSB = 0
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x2], 0b1111_1110);
+        assert_eq!(emu.v_reg[0xF], 0);
+        assert_eq!(emu.pc, 0x202);
     }
 }
