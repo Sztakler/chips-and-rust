@@ -269,6 +269,41 @@ impl Emu {
             self.st -= 1;
         }
     }
+
+    #[allow(dead_code)]
+    pub fn dump_ram(&self) {
+        println!("CHIP-8 RAM Dump (0x000 - 0xFFF):");
+        for addr in (0..RAM_SIZE).step_by(16) {
+            print!("{:04X}: ", addr);
+
+            for i in 0..16 {
+                if addr + i < RAM_SIZE {
+                    print!("{:02X} ", self.ram[addr + i]);
+                } else {
+                    print!("   ");
+                }
+            }
+
+            println!();
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn dump_screen(&self) {
+        println!("CHIP-8 Screen (64x32):");
+        for y in 0..SCREEN_HEIGHT {
+            for x in 0..SCREEN_WIDTH {
+                let idx = y * SCREEN_WIDTH + x;
+                if self.screen[idx] {
+                    print!("■");
+                } else {
+                    print!("⋅");
+                }
+            }
+            println!();
+        }
+        println!("--- End of screen ---");
+    }
 }
 
 #[cfg(test)]
@@ -1288,5 +1323,171 @@ mod tests {
         assert_eq!(emu.v_reg[0x2], 0b1111_1110);
         assert_eq!(emu.v_reg[0xF], 0);
         assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_dxyn_draw_no_collision() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x50;
+        emu.ram[0x50] = 0b1111_0000;
+        emu.ram[0x51] = 0b0000_1111;
+
+        emu.v_reg[0x0] = 10;
+        emu.v_reg[0x1] = 5;
+
+        emu.execute(0xD012);
+
+        let base1 = 5 * SCREEN_WIDTH + 10;
+        assert!(emu.screen[base1]);
+        assert!(emu.screen[base1 + 1]);
+        assert!(emu.screen[base1 + 2]);
+        assert!(emu.screen[base1 + 3]);
+
+        let base2 = 6 * SCREEN_WIDTH + 10;
+        assert!(emu.screen[base2 + 4]);
+        assert!(emu.screen[base2 + 5]);
+        assert!(emu.screen[base2 + 6]);
+        assert!(emu.screen[base2 + 7]);
+
+        assert_eq!(emu.v_reg[0xF], 0);
+    }
+
+    #[test]
+    fn test_dxyn_draw_with_collision() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x50;
+        emu.ram[0x50] = 0b1010_1010;
+
+        emu.v_reg[0x0] = 20;
+        emu.v_reg[0x1] = 10;
+
+        // overwrite two pixels with sprite
+        let idx1 = 10 * SCREEN_WIDTH + 20;
+        let idx3 = 10 * SCREEN_WIDTH + 22;
+        emu.screen[idx1] = true;
+        emu.screen[idx3] = true;
+
+        emu.execute(0xD011);
+
+        assert_eq!(emu.v_reg[0xF], 1);
+
+        assert!(!emu.screen[idx1]);
+        assert!(!emu.screen[idx3]);
+    }
+
+    #[test]
+    fn test_dxyn_wrap_horizontal() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x50;
+        emu.ram[0x50] = 0b0000_1111; // bits 4-7 = 1 → col 4,5,6,7
+
+        emu.v_reg[0x0] = (SCREEN_WIDTH - 4) as u8; // X start
+        emu.v_reg[0x1] = 15; // Y
+
+        emu.execute(0xD011);
+
+        // after wrap -- pixels at the line start (X=0 to 3)
+        #[allow(clippy::identity_op)]
+        let wrapped_base = 15 * SCREEN_WIDTH + 0;
+        assert!(emu.screen[wrapped_base]);
+        assert!(emu.screen[wrapped_base + 1]);
+        assert!(emu.screen[wrapped_base + 2]);
+        assert!(emu.screen[wrapped_base + 3]);
+
+        // old positions (60-63) should be turned off
+        let old_base = 15 * SCREEN_WIDTH + 60;
+        assert!(!emu.screen[old_base]);
+        assert!(!emu.screen[old_base + 1]);
+        assert!(!emu.screen[old_base + 2]);
+        assert!(!emu.screen[old_base + 3]);
+
+        assert_eq!(emu.v_reg[0xF], 0);
+    }
+
+    #[test]
+    fn test_dxyn_wrap_vertical() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x50;
+        emu.ram[0x50] = 0xFF;
+        emu.ram[0x51] = 0xFF;
+
+        emu.v_reg[0x0] = 10;
+        emu.v_reg[0x1] = 31;
+
+        emu.execute(0xD012);
+
+        #[allow(clippy::erasing_op)]
+        #[allow(clippy::identity_op)]
+        let wrapped = 0 * 64 + 10;
+
+        assert!(emu.screen[wrapped]);
+        assert!(emu.screen[wrapped + 1]);
+        assert!(emu.screen[wrapped + 2]);
+        assert!(emu.screen[wrapped + 3]);
+        assert!(emu.screen[wrapped + 4]);
+        assert!(emu.screen[wrapped + 5]);
+        assert!(emu.screen[wrapped + 6]);
+        assert!(emu.screen[wrapped + 7]);
+
+        assert_eq!(emu.v_reg[0xF], 0);
+    }
+
+    #[test]
+    fn test_dxyn_wrap_both_axes() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x50;
+        emu.ram[0x50] = 0b0100_0000;
+        emu.ram[0x51] = 0b0100_0000;
+
+        emu.v_reg[0x4] = (64 - 1) as u8;
+        emu.v_reg[0x5] = (32 - 1) as u8;
+
+        emu.execute(0xD452);
+
+        assert!(emu.screen[0]);
+        assert!(emu.screen[64 * 31]);
+    }
+
+    #[test]
+    fn test_dxyn_multiple_collisions_vf_still_1() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x50;
+        emu.ram[0x50] = 0xFF;
+        emu.v_reg[0x0] = 10;
+        emu.v_reg[0x1] = 10;
+        for i in [0, 2, 4, 6] {
+            emu.screen[10 * 64 + 10 + i] = true;
+        }
+        emu.execute(0xD011);
+        assert_eq!(emu.v_reg[0xF], 1);
+    }
+
+    #[test]
+    fn test_dxyn_zero_height_no_draw() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x50;
+        emu.ram[0x50] = 0xFF;
+        emu.v_reg[0x0] = 20;
+        emu.v_reg[0x1] = 20;
+        emu.execute(0xD010);
+        assert!(emu.screen.iter().all(|&p| !p));
+        assert_eq!(emu.v_reg[0xF], 0);
+    }
+
+    #[test]
+    fn test_dxyn_partial_sprite_offscreen() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x50;
+        emu.ram[0x50] = 0b1111_1111;
+        emu.v_reg[0x0] = 58;
+        emu.v_reg[0x1] = 10;
+        emu.execute(0xD011);
+        for i in 0..6 {
+            assert!(emu.screen[10 * 64 + 58 + i]);
+        }
+        for i in 0..2 {
+            assert!(emu.screen[10 * 64 + i]);
+        }
+        assert_eq!(emu.v_reg[0xF], 0);
     }
 }
