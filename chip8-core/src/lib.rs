@@ -258,8 +258,12 @@ impl Emu {
                 let x = digit2 as usize;
                 self.v_reg[x] = self.dt;
             }
-            // FX015
-            // FX018
+            // FX15 -- Set delay timer to VX
+            (0xF, _, 1, 5) => {
+                let x = digit2 as usize;
+                self.dt = self.v_reg[x];
+            }
+            // FX18
             // CXKK (RND)
             // FX33 (BCD)
             // FX55
@@ -1563,6 +1567,72 @@ mod tests {
         assert_eq!(emu.dt, 59);
         emu.tick();
         assert_eq!(emu.v_reg[0x2], 59);
+        assert_eq!(emu.pc, 0x204);
+    }
+
+    #[test]
+    fn test_fx15_set_dt_basic() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x3] = 42;
+        emu.execute(0xF315);
+        assert_eq!(emu.dt, 42);
+    }
+
+    #[test]
+    fn test_fx15_set_dt_zero() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x0] = 0;
+        emu.execute(0xF015);
+        assert_eq!(emu.dt, 0);
+    }
+
+    #[test]
+    fn test_fx15_set_dt_max() {
+        let mut emu = Emu::new();
+        emu.v_reg[0xF] = 255;
+        emu.execute(0xFF15);
+        assert_eq!(emu.dt, 255);
+    }
+
+    #[test]
+    fn test_fx15_different_registers() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x1] = 100;
+        emu.v_reg[0xA] = 200;
+        emu.execute(0xF115);
+        assert_eq!(emu.dt, 100);
+        emu.execute(0xFA15);
+        assert_eq!(emu.dt, 200);
+    }
+
+    #[test]
+    fn test_fx15_with_tick_cycle() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x4] = 10;
+        emu.ram[0x200] = 0xF4;
+        emu.ram[0x201] = 0x15;
+        emu.pc = 0x200;
+        emu.tick();
+        assert_eq!(emu.dt, 9); // tick decrements dt
+        assert_eq!(emu.pc, 0x202);
+        emu.tick();
+        assert_eq!(emu.dt, 8); // tick decrements dt
+    }
+
+    #[test]
+    fn test_fx15_multiple_in_sequence() {
+        let mut emu = Emu::new();
+        emu.ram[0x200] = 0xF1;
+        emu.ram[0x201] = 0x15;
+        emu.ram[0x202] = 0xF2;
+        emu.ram[0x203] = 0x15;
+        emu.pc = 0x200;
+        emu.v_reg[0x1] = 60;
+        emu.v_reg[0x2] = 30;
+        emu.tick();
+        assert_eq!(emu.dt, 59); // tick decrements dt
+        emu.tick();
+        assert_eq!(emu.dt, 29); // tick decrements dt
         assert_eq!(emu.pc, 0x204);
     }
 }
