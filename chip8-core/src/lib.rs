@@ -203,7 +203,6 @@ impl Emu {
 
                 self.v_reg[x] = kk;
             }
-            // 7XKK -- Set VX = VX + KK
             // 8XY0 -- Set VX = VY
             // ANNN -- I = NNN
             (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
@@ -624,5 +623,117 @@ mod tests {
         emu.execute(0xFE0A); // store to V14
 
         assert_eq!(emu.v_reg[0xE], 5); // takes key with lowest index
+    }
+
+    #[test]
+    fn test_opcode_6xkk_puts_value_into_register() {
+        let mut emu = Emu::new();
+
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0x61;
+        emu.ram[0x201] = 0x42;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[1], 0x42);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_6xkk_load_zero() {
+        let mut emu = Emu::new();
+
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0x60;
+        emu.ram[0x201] = 0x00;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x0], 0x00);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_6xkk_load_max_value() {
+        let mut emu = Emu::new();
+
+        emu.pc = 0x300;
+
+        emu.ram[0x300] = 0x6F;
+        emu.ram[0x301] = 0xFF;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xF], 0xFF);
+        assert_eq!(emu.pc, 0x302);
+    }
+
+    #[test]
+    fn test_opcode_6xkk_overwrite_previous_value() {
+        let mut emu = Emu::new();
+
+        emu.pc = 0x300;
+
+        emu.v_reg[0xF] = 0x42;
+        assert_eq!(emu.v_reg[0xF], 0x42);
+
+        emu.ram[0x300] = 0x6F;
+        emu.ram[0x301] = 0x33;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xF], 0x33);
+        assert_eq!(emu.pc, 0x302);
+    }
+
+    #[test]
+    fn test_opcode_6xkk_multiple_in_sequence_same_register() {
+        let mut emu = Emu::new();
+
+        emu.pc = 0x300;
+
+        emu.ram[0x300] = 0x64;
+        emu.ram[0x301] = 0x33;
+        emu.tick();
+        assert_eq!(emu.v_reg[0x4], 0x33);
+        assert_eq!(emu.pc, 0x302);
+
+        emu.ram[0x302] = 0x64;
+        emu.ram[0x303] = 0x42;
+        emu.tick();
+        assert_eq!(emu.v_reg[0x4], 0x42);
+        assert_eq!(emu.pc, 0x304);
+
+        emu.ram[0x304] = 0x64;
+        emu.ram[0x305] = 0x21;
+        emu.tick();
+        assert_eq!(emu.v_reg[0x4], 0x21);
+        assert_eq!(emu.pc, 0x306);
+    }
+    #[test]
+    fn test_opcode_6xkk_multiple_in_sequence_different_registers() {
+        let mut emu = Emu::new();
+
+        emu.pc = 0x300;
+
+        emu.ram[0x300] = 0x64;
+        emu.ram[0x301] = 0x33;
+        emu.tick();
+        assert_eq!(emu.v_reg[0x4], 0x33);
+        assert_eq!(emu.pc, 0x302);
+
+        emu.ram[0x302] = 0x62;
+        emu.ram[0x303] = 0x42;
+        emu.tick();
+        assert_eq!(emu.v_reg[0x2], 0x42);
+        assert_eq!(emu.pc, 0x304);
+
+        emu.ram[0x304] = 0x6A;
+        emu.ram[0x305] = 0x21;
+        emu.tick();
+        assert_eq!(emu.v_reg[0xA], 0x21);
+        assert_eq!(emu.pc, 0x306);
     }
 }
