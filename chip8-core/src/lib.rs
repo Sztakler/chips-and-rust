@@ -203,6 +203,13 @@ impl Emu {
 
                 self.v_reg[x] = kk;
             }
+            // 7XKK -- Set VX = VX + KK
+            (7, _, _, _) => {
+                let x = digit2 as usize;
+                let kk = (op & 0x00FF) as u8;
+
+                self.v_reg[x] += kk;
+            }
             // 8XY0 -- Set VX = VY
             // ANNN -- I = NNN
             (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
