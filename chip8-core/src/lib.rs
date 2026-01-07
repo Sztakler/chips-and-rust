@@ -211,6 +211,12 @@ impl Emu {
                 self.v_reg[x] = self.v_reg[x].wrapping_add(kk);
             }
             // 8XY0 -- Set VX = VY
+            (8, _, _, 0) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                self.v_reg[x] = self.v_reg[y];
+            }
             // ANNN -- I = NNN
             (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
         }
