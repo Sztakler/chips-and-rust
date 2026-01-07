@@ -226,6 +226,33 @@ impl Emu {
                 let nnn = op & 0x0FFF;
                 self.i_reg = nnn;
             }
+            // DXYN -- Display N-byte sprite starting at memory location I at (VX, VY); set VF if collision
+            (0xD, _, _, n) => {
+                let x_coord = self.v_reg[digit2 as usize] as usize;
+                let y_coord = self.v_reg[digit3 as usize] as usize;
+                let i = self.i_reg as usize;
+                let height = n as usize;
+
+                self.v_reg[0xF] = 0; // initially no collision
+
+                for row in 0..height {
+                    let sprite_row = self.ram[i + row];
+                    for col in 0..8 {
+                        let pixel = (sprite_row >> (7 - col)) & 1;
+                        if pixel == 1 {
+                            let screen_x = (x_coord + col) % SCREEN_WIDTH;
+                            let screen_y = (y_coord + row) % SCREEN_HEIGHT;
+                            let index = screen_y * SCREEN_WIDTH + screen_x;
+
+                            if self.screen[index] {
+                                self.v_reg[0xF] = 1;
+                            }
+
+                            self.screen[index] ^= true;
+                        }
+                    }
+                }
+            }
             (_, _, _, _) => unimplemented!("Unimplemented opcode: {:04X}", op),
         }
     }
