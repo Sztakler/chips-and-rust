@@ -196,6 +196,33 @@ impl Emu {
                     self.pc -= 2; // Loop until a key is pressed
                 }
             }
+            // 6XKK -- Set VX = KK
+            (6, _, _, _) => {
+                let x = digit2 as usize;
+                let kk = (op & 0x00FF) as u8;
+
+                self.v_reg[x] = kk;
+            }
+            // 7XKK -- Set VX = VX + KK
+            (7, _, _, _) => {
+                let x = digit2 as usize;
+                let kk = (op & 0x00FF) as u8;
+
+                self.v_reg[x] = self.v_reg[x].wrapping_add(kk);
+            }
+            // 8XY0 -- Set VX = VY
+            (8, _, _, 0) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                self.v_reg[x] = self.v_reg[y];
+            }
+            // ANNN -- I = NNN
+            (0xA, _, _, _) => {
+                let nnn = op & 0x0FFF;
+
+                self.i_reg = nnn;
+            }
             (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
         }
     }
@@ -614,5 +641,373 @@ mod tests {
         emu.execute(0xFE0A); // store to V14
 
         assert_eq!(emu.v_reg[0xE], 5); // takes key with lowest index
+    }
+
+    #[test]
+    fn test_opcode_6xkk_puts_value_into_register() {
+        let mut emu = Emu::new();
+
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0x61;
+        emu.ram[0x201] = 0x42;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[1], 0x42);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_6xkk_load_zero() {
+        let mut emu = Emu::new();
+
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0x60;
+        emu.ram[0x201] = 0x00;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x0], 0x00);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_6xkk_load_max_value() {
+        let mut emu = Emu::new();
+
+        emu.pc = 0x300;
+
+        emu.ram[0x300] = 0x6F;
+        emu.ram[0x301] = 0xFF;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xF], 0xFF);
+        assert_eq!(emu.pc, 0x302);
+    }
+
+    #[test]
+    fn test_opcode_6xkk_overwrite_previous_value() {
+        let mut emu = Emu::new();
+
+        emu.pc = 0x300;
+
+        emu.v_reg[0xF] = 0x42;
+        assert_eq!(emu.v_reg[0xF], 0x42);
+
+        emu.ram[0x300] = 0x6F;
+        emu.ram[0x301] = 0x33;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xF], 0x33);
+        assert_eq!(emu.pc, 0x302);
+    }
+
+    #[test]
+    fn test_opcode_6xkk_multiple_in_sequence_same_register() {
+        let mut emu = Emu::new();
+
+        emu.pc = 0x300;
+
+        emu.ram[0x300] = 0x64;
+        emu.ram[0x301] = 0x33;
+        emu.tick();
+        assert_eq!(emu.v_reg[0x4], 0x33);
+        assert_eq!(emu.pc, 0x302);
+
+        emu.ram[0x302] = 0x64;
+        emu.ram[0x303] = 0x42;
+        emu.tick();
+        assert_eq!(emu.v_reg[0x4], 0x42);
+        assert_eq!(emu.pc, 0x304);
+
+        emu.ram[0x304] = 0x64;
+        emu.ram[0x305] = 0x21;
+        emu.tick();
+        assert_eq!(emu.v_reg[0x4], 0x21);
+        assert_eq!(emu.pc, 0x306);
+    }
+    #[test]
+    fn test_opcode_6xkk_multiple_in_sequence_different_registers() {
+        let mut emu = Emu::new();
+
+        emu.pc = 0x300;
+
+        emu.ram[0x300] = 0x64;
+        emu.ram[0x301] = 0x33;
+        emu.tick();
+        assert_eq!(emu.v_reg[0x4], 0x33);
+        assert_eq!(emu.pc, 0x302);
+
+        emu.ram[0x302] = 0x62;
+        emu.ram[0x303] = 0x42;
+        emu.tick();
+        assert_eq!(emu.v_reg[0x2], 0x42);
+        assert_eq!(emu.pc, 0x304);
+
+        emu.ram[0x304] = 0x6A;
+        emu.ram[0x305] = 0x21;
+        emu.tick();
+        assert_eq!(emu.v_reg[0xA], 0x21);
+        assert_eq!(emu.pc, 0x306);
+    }
+
+    #[test]
+    fn test_opcode_7xkk_add_basic() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x73;
+        emu.ram[0x201] = 0x45;
+        emu.v_reg[0x3] = 0x20;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x3], 0x20 + 0x45);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_7xkk_add_zero() {
+        let mut emu = Emu::new();
+        emu.pc = 0x300;
+        emu.ram[0x300] = 0x70;
+        emu.ram[0x301] = 0x00;
+        emu.v_reg[0x0] = 0xAB;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x0], 0xAB);
+        assert_eq!(emu.pc, 0x302);
+    }
+
+    #[test]
+    fn test_opcode_7xkk_add_max_value() {
+        let mut emu = Emu::new();
+        emu.pc = 0x400;
+        emu.ram[0x400] = 0x7F;
+        emu.ram[0x401] = 0xFF;
+        emu.v_reg[0xF] = 0x00;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xF], 0xFF);
+        assert_eq!(emu.pc, 0x402);
+    }
+
+    #[test]
+    fn test_opcode_7xkk_add_overflow() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x7A;
+        emu.ram[0x201] = 0x80;
+        emu.v_reg[0xA] = 0xFF;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xA], 0x7F); // 0x017F → 0x7F (overflow, 8-bit wrap)
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_7xkk_add_multiple_times() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.v_reg[0x5] = 0x10;
+
+        emu.ram[0x200] = 0x75;
+        emu.ram[0x201] = 0x20;
+        emu.ram[0x202] = 0x75;
+        emu.ram[0x203] = 0x30;
+        emu.ram[0x204] = 0x75;
+        emu.ram[0x205] = 0x40;
+
+        emu.tick();
+        assert_eq!(emu.v_reg[0x5], 0x30);
+
+        emu.tick();
+        assert_eq!(emu.v_reg[0x5], 0x60);
+
+        emu.tick();
+        assert_eq!(emu.v_reg[0x5], 0xA0);
+        assert_eq!(emu.pc, 0x206);
+    }
+
+    #[test]
+    fn test_opcode_8xy0_assign_basic() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x81;
+        emu.ram[0x201] = 0x20;
+        emu.v_reg[0x2] = 0xAB;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x1], 0xAB);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy0_assign_zero() {
+        let mut emu = Emu::new();
+        emu.pc = 0x300;
+        emu.ram[0x300] = 0x83;
+        emu.ram[0x301] = 0x00;
+        emu.v_reg[0x0] = 0x00;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x3], 0x00);
+        assert_eq!(emu.pc, 0x302);
+    }
+
+    #[test]
+    fn test_opcode_8xy0_assign_max_value() {
+        let mut emu = Emu::new();
+        emu.pc = 0x400;
+        emu.ram[0x400] = 0x8F;
+        emu.ram[0x401] = 0x40;
+        emu.v_reg[0x4] = 0xFF;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xF], 0xFF);
+        assert_eq!(emu.pc, 0x402);
+    }
+
+    #[test]
+    fn test_opcode_8xy0_overwrite_existing_value() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x85;
+        emu.ram[0x201] = 0x60;
+        emu.v_reg[0x5] = 0x12;
+        emu.v_reg[0x6] = 0xCD;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x5], 0xCD);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy0_self_assign() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x88;
+        emu.ram[0x201] = 0x80;
+        emu.v_reg[0x8] = 0x5A;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x8], 0x5A);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy0_multiple_assigns() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0x81;
+        emu.ram[0x201] = 0x20;
+        emu.ram[0x202] = 0x83;
+        emu.ram[0x203] = 0x40;
+        emu.ram[0x204] = 0x85;
+        emu.ram[0x205] = 0x60;
+
+        emu.v_reg[0x2] = 0x11;
+        emu.v_reg[0x4] = 0x22;
+        emu.v_reg[0x6] = 0x33;
+
+        emu.tick();
+        assert_eq!(emu.v_reg[0x1], 0x11);
+
+        emu.tick();
+        assert_eq!(emu.v_reg[0x3], 0x22);
+
+        emu.tick();
+        assert_eq!(emu.v_reg[0x5], 0x33);
+
+        assert_eq!(emu.pc, 0x206);
+    }
+
+    #[test]
+    fn test_opcode_annn_load_basic() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0xA1;
+        emu.ram[0x201] = 0x23;
+
+        emu.tick();
+
+        assert_eq!(emu.i_reg, 0x123);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_annn_load_zero() {
+        let mut emu = Emu::new();
+        emu.pc = 0x300;
+        emu.ram[0x300] = 0xA0;
+        emu.ram[0x301] = 0x00;
+
+        emu.tick();
+
+        assert_eq!(emu.i_reg, 0x000);
+        assert_eq!(emu.pc, 0x302);
+    }
+
+    #[test]
+    fn test_opcode_annn_load_max_value() {
+        let mut emu = Emu::new();
+        emu.pc = 0x400;
+        emu.ram[0x400] = 0xAF;
+        emu.ram[0x401] = 0xFF;
+
+        emu.tick();
+
+        assert_eq!(emu.i_reg, 0xFFF);
+        assert_eq!(emu.pc, 0x402);
+    }
+
+    #[test]
+    fn test_opcode_annn_overwrite_existing_value() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.i_reg = 0x456;
+
+        emu.ram[0x200] = 0xA7;
+        emu.ram[0x201] = 0x89;
+
+        emu.tick();
+
+        assert_eq!(emu.i_reg, 0x789);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_annn_multiple_loads() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0xA1;
+        emu.ram[0x201] = 0x11;
+        emu.ram[0x202] = 0xA2;
+        emu.ram[0x203] = 0x22;
+        emu.ram[0x204] = 0xA3;
+        emu.ram[0x205] = 0x33;
+
+        emu.tick();
+        assert_eq!(emu.i_reg, 0x111);
+
+        emu.tick();
+        assert_eq!(emu.i_reg, 0x222);
+
+        emu.tick();
+        assert_eq!(emu.i_reg, 0x333);
+        assert_eq!(emu.pc, 0x206);
     }
 }
