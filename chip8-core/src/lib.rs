@@ -253,6 +253,17 @@ impl Emu {
                     }
                 }
             }
+            // FX07 -- Store delay timer value in VX
+            (0xF, _, 0, 7) => {
+                let x = digit2 as usize;
+                self.v_reg[x] = self.dt;
+            }
+            // FX015
+            // FX018
+            // CXKK (RND)
+            // FX33 (BCD)
+            // FX55
+            // FX65
             (_, _, _, _) => unimplemented!("Unimplemented opcode: {:04X}", op),
         }
     }
@@ -1489,5 +1500,69 @@ mod tests {
             assert!(emu.screen[10 * 64 + i]);
         }
         assert_eq!(emu.v_reg[0xF], 0);
+    }
+
+    #[test]
+    fn test_fx07_load_dt_basic() {
+        let mut emu = Emu::new();
+        emu.dt = 42;
+        emu.execute(0xF207);
+        assert_eq!(emu.v_reg[0x2], 42);
+    }
+
+    #[test]
+    fn test_fx07_load_dt_zero() {
+        let mut emu = Emu::new();
+        emu.dt = 0;
+        emu.execute(0xF007);
+        assert_eq!(emu.v_reg[0x0], 0);
+    }
+
+    #[test]
+    fn test_fx07_load_dt_max() {
+        let mut emu = Emu::new();
+        emu.dt = 255;
+        emu.execute(0xFF07);
+        assert_eq!(emu.v_reg[0xF], 255);
+    }
+
+    #[test]
+    fn test_fx07_different_registers() {
+        let mut emu = Emu::new();
+        emu.dt = 100;
+        emu.execute(0xF107);
+        assert_eq!(emu.v_reg[0x1], 100);
+        emu.execute(0xFA07);
+        assert_eq!(emu.v_reg[0xA], 100);
+    }
+
+    #[test]
+    fn test_fx07_with_tick_cycle() {
+        let mut emu = Emu::new();
+        emu.dt = 5;
+        emu.ram[0x200] = 0xF3;
+        emu.ram[0x201] = 0x07;
+        emu.pc = 0x200;
+        emu.tick();
+        assert_eq!(emu.v_reg[0x3], 5);
+        assert_eq!(emu.dt, 4);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_fx07_multiple_in_sequence() {
+        let mut emu = Emu::new();
+        emu.dt = 60;
+        emu.ram[0x200] = 0xF1;
+        emu.ram[0x201] = 0x07;
+        emu.ram[0x202] = 0xF2;
+        emu.ram[0x203] = 0x07;
+        emu.pc = 0x200;
+        emu.tick();
+        assert_eq!(emu.v_reg[0x1], 60);
+        assert_eq!(emu.dt, 59);
+        emu.tick();
+        assert_eq!(emu.v_reg[0x2], 59);
+        assert_eq!(emu.pc, 0x204);
     }
 }
