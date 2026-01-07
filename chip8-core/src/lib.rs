@@ -218,6 +218,11 @@ impl Emu {
                 self.v_reg[x] = self.v_reg[y];
             }
             // ANNN -- I = NNN
+            (0xA, _, _, _) => {
+                let nnn = op & 0x0FFF;
+
+                self.i_reg = nnn;
+            }
             (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
         }
     }
