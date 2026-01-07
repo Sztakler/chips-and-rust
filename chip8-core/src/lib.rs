@@ -829,4 +829,103 @@ mod tests {
         assert_eq!(emu.v_reg[0x5], 0xA0);
         assert_eq!(emu.pc, 0x206);
     }
+
+    #[test]
+    fn test_opcode_8xy0_assign_basic() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x81;
+        emu.ram[0x201] = 0x20;
+        emu.v_reg[0x2] = 0xAB;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x1], 0xAB);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy0_assign_zero() {
+        let mut emu = Emu::new();
+        emu.pc = 0x300;
+        emu.ram[0x300] = 0x83;
+        emu.ram[0x301] = 0x00;
+        emu.v_reg[0x0] = 0x00;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x3], 0x00);
+        assert_eq!(emu.pc, 0x302);
+    }
+
+    #[test]
+    fn test_opcode_8xy0_assign_max_value() {
+        let mut emu = Emu::new();
+        emu.pc = 0x400;
+        emu.ram[0x400] = 0x8F;
+        emu.ram[0x401] = 0x40;
+        emu.v_reg[0x4] = 0xFF;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xF], 0xFF);
+        assert_eq!(emu.pc, 0x402);
+    }
+
+    #[test]
+    fn test_opcode_8xy0_overwrite_existing_value() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x85;
+        emu.ram[0x201] = 0x60;
+        emu.v_reg[0x5] = 0x12;
+        emu.v_reg[0x6] = 0xCD;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x5], 0xCD);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy0_self_assign() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x88;
+        emu.ram[0x201] = 0x80;
+        emu.v_reg[0x8] = 0x5A;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x8], 0x5A);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_8xy0_multiple_assigns() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0x81;
+        emu.ram[0x201] = 0x20;
+        emu.ram[0x202] = 0x83;
+        emu.ram[0x203] = 0x40;
+        emu.ram[0x204] = 0x85;
+        emu.ram[0x205] = 0x60;
+
+        emu.v_reg[0x2] = 0x11;
+        emu.v_reg[0x4] = 0x22;
+        emu.v_reg[0x6] = 0x33;
+
+        emu.tick();
+        assert_eq!(emu.v_reg[0x1], 0x11);
+
+        emu.tick();
+        assert_eq!(emu.v_reg[0x3], 0x22);
+
+        emu.tick();
+        assert_eq!(emu.v_reg[0x5], 0x33);
+
+        assert_eq!(emu.pc, 0x206);
+    }
 }
