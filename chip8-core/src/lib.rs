@@ -933,4 +933,81 @@ mod tests {
 
         assert_eq!(emu.pc, 0x206);
     }
+
+    #[test]
+    fn test_opcode_annn_load_basic() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0xA1;
+        emu.ram[0x201] = 0x23;
+
+        emu.tick();
+
+        assert_eq!(emu.i_reg, 0x123);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_annn_load_zero() {
+        let mut emu = Emu::new();
+        emu.pc = 0x300;
+        emu.ram[0x300] = 0xA0;
+        emu.ram[0x301] = 0x00;
+
+        emu.tick();
+
+        assert_eq!(emu.i_reg, 0x000);
+        assert_eq!(emu.pc, 0x302);
+    }
+
+    #[test]
+    fn test_opcode_annn_load_max_value() {
+        let mut emu = Emu::new();
+        emu.pc = 0x400;
+        emu.ram[0x400] = 0xAF;
+        emu.ram[0x401] = 0xFF;
+
+        emu.tick();
+
+        assert_eq!(emu.i_reg, 0xFFF);
+        assert_eq!(emu.pc, 0x402);
+    }
+
+    #[test]
+    fn test_opcode_annn_overwrite_existing_value() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.i_reg = 0x456;
+
+        emu.ram[0x200] = 0xA7;
+        emu.ram[0x201] = 0x89;
+
+        emu.tick();
+
+        assert_eq!(emu.i_reg, 0x789);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_annn_multiple_loads() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+
+        emu.ram[0x200] = 0xA1;
+        emu.ram[0x201] = 0x11;
+        emu.ram[0x202] = 0xA2;
+        emu.ram[0x203] = 0x22;
+        emu.ram[0x204] = 0xA3;
+        emu.ram[0x205] = 0x33;
+
+        emu.tick();
+        assert_eq!(emu.i_reg, 0x111);
+
+        emu.tick();
+        assert_eq!(emu.i_reg, 0x222);
+
+        emu.tick();
+        assert_eq!(emu.i_reg, 0x333);
+        assert_eq!(emu.pc, 0x206);
+    }
 }
