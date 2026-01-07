@@ -208,7 +208,7 @@ impl Emu {
                 let x = digit2 as usize;
                 let kk = (op & 0x00FF) as u8;
 
-                self.v_reg[x] += kk;
+                self.v_reg[x] = self.v_reg[x].wrapping_add(kk);
             }
             // 8XY0 -- Set VX = VY
             // ANNN -- I = NNN
@@ -742,5 +742,85 @@ mod tests {
         emu.tick();
         assert_eq!(emu.v_reg[0xA], 0x21);
         assert_eq!(emu.pc, 0x306);
+    }
+
+    #[test]
+    fn test_opcode_7xkk_add_basic() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x73;
+        emu.ram[0x201] = 0x45;
+        emu.v_reg[0x3] = 0x20;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x3], 0x20 + 0x45);
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_7xkk_add_zero() {
+        let mut emu = Emu::new();
+        emu.pc = 0x300;
+        emu.ram[0x300] = 0x70;
+        emu.ram[0x301] = 0x00;
+        emu.v_reg[0x0] = 0xAB;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x0], 0xAB);
+        assert_eq!(emu.pc, 0x302);
+    }
+
+    #[test]
+    fn test_opcode_7xkk_add_max_value() {
+        let mut emu = Emu::new();
+        emu.pc = 0x400;
+        emu.ram[0x400] = 0x7F;
+        emu.ram[0x401] = 0xFF;
+        emu.v_reg[0xF] = 0x00;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xF], 0xFF);
+        assert_eq!(emu.pc, 0x402);
+    }
+
+    #[test]
+    fn test_opcode_7xkk_add_overflow() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0x7A;
+        emu.ram[0x201] = 0x80;
+        emu.v_reg[0xA] = 0xFF;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0xA], 0x7F); // 0x017F → 0x7F (overflow, 8-bit wrap)
+        assert_eq!(emu.pc, 0x202);
+    }
+
+    #[test]
+    fn test_opcode_7xkk_add_multiple_times() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.v_reg[0x5] = 0x10;
+
+        emu.ram[0x200] = 0x75;
+        emu.ram[0x201] = 0x20;
+        emu.ram[0x202] = 0x75;
+        emu.ram[0x203] = 0x30;
+        emu.ram[0x204] = 0x75;
+        emu.ram[0x205] = 0x40;
+
+        emu.tick();
+        assert_eq!(emu.v_reg[0x5], 0x30);
+
+        emu.tick();
+        assert_eq!(emu.v_reg[0x5], 0x60);
+
+        emu.tick();
+        assert_eq!(emu.v_reg[0x5], 0xA0);
+        assert_eq!(emu.pc, 0x206);
     }
 }
