@@ -180,6 +180,14 @@ impl Emu {
                     self.pc += 2;
                 }
             }
+            // EXA1 -- Skip next instruction if key with the value of VX is not pressed
+            (0xE, _, 0xA, 1) => {
+                let x = digit2 as usize;
+                let key_val = self.v_reg[x] as usize;
+                if key_val < NUM_KEYS && !self.keys[key_val] {
+                    self.pc += 2;
+                }
+            }
             // FX0A -- Wait for a key press, store the value of the key in VX
             (0xF, _, 0, 0xA) => {
                 let x = digit2 as usize;
