@@ -113,23 +113,29 @@ impl Emu {
 
         #[allow(clippy::match_single_binding)]
         match (digit1, digit2, digit3, digit4) {
+            // 0000 -- No operation (NOP)
             (0, 0, 0, 0) => (),
+            // 00E0 -- Clears screen (CLS)
             (0, 0, 0xE, 0) => {
                 self.screen = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
             }
+            // 00EE -- Return from subroutine (RET)
             (0, 0, 0xE, 0xE) => {
                 let ret_addr = self.pop();
                 self.pc = ret_addr;
             }
+            // 1NNN -- Jump to location NNN (JMP)
             (1, _, _, _) => {
                 let nnn = op & 0x0FFF;
                 self.pc = nnn;
             }
+            // 2NNN -- Call subroutine at NNN (CALL)
             (2, _, _, _) => {
                 let nnn = op & 0x0FFF;
                 self.push(self.pc);
                 self.pc = nnn;
             }
+            // VXKK -- Skip next instruction if VX=KK
             (3, _, _, _) => {
                 let x = digit2 as usize;
                 let nn = (op & 0x00FF) as u8;
@@ -137,10 +143,12 @@ impl Emu {
                     self.pc += 2;
                 }
             }
+            // BNNN -- jump to location NNN + V0
             (0xB, _, _, _) => {
                 let nnn = op & 0x0FFF;
                 self.pc = (self.v_reg[0] as u16) + nnn;
             }
+            // 4XKK -- Skip next instruction if VX != kk
             (4, _, _, _) => {
                 let x = digit2 as usize;
                 let nn = op & 0x00FF;
@@ -148,6 +156,7 @@ impl Emu {
                     self.pc += 2;
                 }
             }
+            // 5XY0 -- Skip next instruction if VX = VY
             (5, _, _, 0) => {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
@@ -155,6 +164,7 @@ impl Emu {
                     self.pc += 2;
                 }
             }
+            // 9XY0 -- Skip next instruction if VX != VY
             (9, _, _, 0) => {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
@@ -162,6 +172,7 @@ impl Emu {
                     self.pc += 2;
                 }
             }
+            // EX9E -- Skip next instruction if key with the value of Vx is pressed
             (0xE, _, 9, 0xE) => {
                 let x = digit2 as usize;
                 let key_val = self.v_reg[x] as usize;
@@ -169,6 +180,15 @@ impl Emu {
                     self.pc += 2;
                 }
             }
+            // EXA1 -- Skip next instruction if key with the value of VX is not pressed
+            (0xE, _, 0xA, 1) => {
+                let x = digit2 as usize;
+                let key_val = self.v_reg[x] as usize;
+                if key_val < NUM_KEYS && !self.keys[key_val] {
+                    self.pc += 2;
+                }
+            }
+            // FX0A -- Wait for a key press, store the value of the key in VX
             (0xF, _, 0, 0xA) => {
                 let x = digit2 as usize;
                 if let Some(key) = (0..self.keys.len()).find(|&i| self.keys[i]) {
@@ -177,11 +197,23 @@ impl Emu {
                     self.pc -= 2;
                 }
             }
+            // FX1E -- Set I = I + VX
+            (0xF, _, 1, 0xE) => {
+                let x = digit2 as usize;
+                self.i_reg += self.v_reg[x] as u16;
+            }
+            // FX29 -- Set I = location of sprite for digit Vx.
+            (0xF, _, 2, 9) => {
+                let x = digit2 as usize;
+                self.i_reg = (self.v_reg[x] as u16) * 5; // font is stored RAM using 5 bytes per character
+            }
+            // 6XKK -- Set VX = KK
             (6, _, _, _) => {
                 let x = digit2 as usize;
                 let kk = (op & 0x00FF) as u8;
                 self.v_reg[x] = kk;
             }
+            // 7XKK -- Set VX = VX + KK
             (7, _, _, _) => {
                 let x = digit2 as usize;
                 let kk = (op & 0x00FF) as u8;
@@ -194,28 +226,37 @@ impl Emu {
                 let vy = self.v_reg[y];
 
                 match n {
+                    // 8XY0 -- Set VX = VY
                     0 => self.v_reg[x] = vy,
+                    // 8XY1 -- Set VX = VX OR VY
                     1 => self.v_reg[x] |= vy,
+                    // 8XY2 -- Set VX = VX AND VY
                     2 => self.v_reg[x] &= vy,
+                    // 8XY3 -- Set VX = VX XOR VY
                     3 => self.v_reg[x] ^= vy,
+                    // 8XY4 -- Set VX = VX + VY, set VF = carry
                     4 => {
                         let sum = vx as u16 + vy as u16;
                         self.v_reg[x] = sum as u8;
                         self.v_reg[0xF] = if sum > 0xFF { 1 } else { 0 };
                     }
+                    // 8XY5 -- Set VX = VX - VY, set VF = NOT borrow
                     5 => {
                         self.v_reg[0xF] = if vx >= vy { 1 } else { 0 };
                         self.v_reg[x] = vx.wrapping_sub(vy);
                     }
+                    // 8XY6 -- Set VX = VX SHR 1
                     6 => {
                         self.v_reg[x] = vy;
                         self.v_reg[0xF] = vy & 1;
                         self.v_reg[x] >>= 1;
                     }
+                    // 8XY7 -- Set VX = VY - VX, set VF = NOT borrow
                     7 => {
                         self.v_reg[0xF] = if vy >= vx { 1 } else { 0 };
                         self.v_reg[x] = vy.wrapping_sub(vx);
                     }
+                    // 8XYE -- Set VX SHL 1
                     0xE => {
                         self.v_reg[x] = vy;
                         self.v_reg[0xF] = (vy >> 7) & 1;
@@ -224,6 +265,7 @@ impl Emu {
                     _ => unimplemented!("Unimplemented 8XY{} opcode", n),
                 }
             }
+            // ANNN -- Set I = NNN
             (0xA, _, _, _) => {
                 let nnn = op & 0x0FFF;
                 self.i_reg = nnn;
@@ -1897,13 +1939,13 @@ mod tests {
         emu.ram[0x302] = 30;
         emu.ram[0x303] = 40;
 
-        emu.execute(0xF365); // F365 → wczytaj V0-V3
+        emu.execute(0xF365); // read V0-V3
 
         assert_eq!(emu.v_reg[0x0], 10);
         assert_eq!(emu.v_reg[0x1], 20);
         assert_eq!(emu.v_reg[0x2], 30);
         assert_eq!(emu.v_reg[0x3], 40);
-        assert_eq!(emu.i_reg, 0x300); // I nie zwiększone
+        assert_eq!(emu.i_reg, 0x300); // I unchanged
     }
 
     #[test]
@@ -1919,7 +1961,7 @@ mod tests {
         for i in 0..=0xF {
             assert_eq!(emu.v_reg[i], i as u8 * 10);
         }
-        assert_eq!(emu.i_reg, 0x500); // I bez zmian
+        assert_eq!(emu.i_reg, 0x500); // I unchanged
     }
 
     #[test]
@@ -1956,5 +1998,129 @@ mod tests {
         assert_eq!(emu.v_reg[0x2], 70);
         assert_eq!(emu.i_reg, 0x200);
         assert_eq!(emu.pc, 0x302);
+    }
+
+    #[test]
+    fn test_exa1_skip_when_key_not_pressed() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0xEA;
+        emu.ram[0x201] = 0xA1;
+        emu.v_reg[0xA] = 0x5;
+        emu.keys[5] = false;
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x204); // skip
+    }
+
+    #[test]
+    fn test_exa1_no_skip_when_key_pressed() {
+        let mut emu = Emu::new();
+        emu.pc = 0x300;
+        emu.ram[0x300] = 0xE4;
+        emu.ram[0x301] = 0xA1;
+        emu.v_reg[0x4] = 0xC;
+        emu.keys[0xC] = true;
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x302); // no skip
+    }
+
+    #[test]
+    fn test_exa1_no_skip_when_key_out_of_range() {
+        let mut emu = Emu::new();
+        emu.pc = 0x400;
+        emu.ram[0x400] = 0xE1;
+        emu.ram[0x401] = 0xA1;
+        emu.v_reg[0x1] = 0xFF;
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x402);
+    }
+
+    #[test]
+    fn test_fx1e_add_basic() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x100;
+        emu.v_reg[0x3] = 0x45;
+
+        emu.execute(0xF31E);
+
+        assert_eq!(emu.i_reg, 0x145);
+    }
+
+    #[test]
+    fn test_fx1e_add_zero() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x200;
+        emu.v_reg[0x0] = 0x00;
+
+        emu.execute(0xF01E);
+
+        assert_eq!(emu.i_reg, 0x200);
+    }
+
+    #[test]
+    fn test_fx1e_add_max() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0xF00;
+        emu.v_reg[0xF] = 0xFF;
+
+        emu.execute(0xFF1E);
+
+        assert_eq!(emu.i_reg, 0xFFF); // wrap-around
+    }
+
+    #[test]
+    fn test_fx1e_multiple_adds() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x300;
+        emu.v_reg[0x1] = 0x10;
+        emu.v_reg[0x2] = 0x20;
+
+        emu.execute(0xF11E);
+        assert_eq!(emu.i_reg, 0x310);
+
+        emu.execute(0xF21E);
+        assert_eq!(emu.i_reg, 0x330);
+    }
+
+    #[test]
+    fn test_fx29_font_address_digit_0() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x0] = 0x0;
+        emu.execute(0xF029);
+        assert_eq!(emu.i_reg, 0x0);
+    }
+
+    #[test]
+    fn test_fx29_font_address_digit_5() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x5] = 0x5;
+        emu.execute(0xF529);
+        assert_eq!(emu.i_reg, 25); // 5 * 5 = 25
+    }
+
+    #[test]
+    fn test_fx29_font_address_digit_f() {
+        let mut emu = Emu::new();
+        emu.v_reg[0xF] = 0xF;
+        emu.execute(0xFF29);
+        assert_eq!(emu.i_reg, 75); // 15 * 5 = 75
+    }
+
+    #[test]
+    fn test_fx29_multiple_digits() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x3] = 0x3;
+        emu.execute(0xF329);
+        assert_eq!(emu.i_reg, 15);
+
+        emu.v_reg[0xB] = 0xB;
+        emu.execute(0xFB29);
+        assert_eq!(emu.i_reg, 55);
     }
 }
