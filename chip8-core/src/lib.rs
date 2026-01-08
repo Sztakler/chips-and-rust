@@ -299,7 +299,14 @@ impl Emu {
                 }
             }
 
-            // FX65
+            // FX65 -- Reads values from memory starting at I to registers V0-VX
+            (0xF, _, 6, 5) => {
+                let x = digit2 as usize;
+                let addr = self.i_reg as usize;
+                for i in 0..=x {
+                    self.v_reg[i] = self.ram[addr + i];
+                }
+            }
             (_, _, _, _) => unimplemented!("Unimplemented opcode: {:04X}", op),
         }
     }
@@ -1879,5 +1886,75 @@ mod tests {
         emu.tick();
         assert_eq!(emu.ram[0x702], 22);
         assert_eq!(emu.pc, 0x204);
+    }
+
+    #[test]
+    fn test_fx65_load_registers_basic() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x300;
+        emu.ram[0x300] = 10;
+        emu.ram[0x301] = 20;
+        emu.ram[0x302] = 30;
+        emu.ram[0x303] = 40;
+
+        emu.execute(0xF365); // F365 → wczytaj V0-V3
+
+        assert_eq!(emu.v_reg[0x0], 10);
+        assert_eq!(emu.v_reg[0x1], 20);
+        assert_eq!(emu.v_reg[0x2], 30);
+        assert_eq!(emu.v_reg[0x3], 40);
+        assert_eq!(emu.i_reg, 0x300); // I nie zwiększone
+    }
+
+    #[test]
+    fn test_fx65_load_all_registers() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x500;
+        for i in 0..=0xF {
+            emu.ram[0x500 + i] = i as u8 * 10;
+        }
+
+        emu.execute(0xFF65);
+
+        for i in 0..=0xF {
+            assert_eq!(emu.v_reg[i], i as u8 * 10);
+        }
+        assert_eq!(emu.i_reg, 0x500); // I bez zmian
+    }
+
+    #[test]
+    fn test_fx65_load_partial() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x600;
+        emu.ram[0x600] = 99;
+        emu.ram[0x601] = 88;
+
+        emu.execute(0xF165);
+
+        assert_eq!(emu.v_reg[0x0], 99);
+        assert_eq!(emu.v_reg[0x1], 88);
+        assert_eq!(emu.v_reg[0x5], 0);
+        assert_eq!(emu.i_reg, 0x600);
+    }
+
+    #[test]
+    fn test_fx65_with_tick_cycle() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x200;
+        emu.ram[0x200] = 50;
+        emu.ram[0x201] = 60;
+        emu.ram[0x202] = 70;
+
+        emu.ram[0x300] = 0xF2;
+        emu.ram[0x301] = 0x65;
+        emu.pc = 0x300;
+
+        emu.tick();
+
+        assert_eq!(emu.v_reg[0x0], 50);
+        assert_eq!(emu.v_reg[0x1], 60);
+        assert_eq!(emu.v_reg[0x2], 70);
+        assert_eq!(emu.i_reg, 0x200);
+        assert_eq!(emu.pc, 0x302);
     }
 }
