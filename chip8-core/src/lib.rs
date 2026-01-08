@@ -197,6 +197,17 @@ impl Emu {
                     self.pc -= 2;
                 }
             }
+            // FX1E -- Set I = I + VX
+            (0xF, _, 1, 0xE) => {
+                let x = digit2 as usize;
+                self.i_reg += self.v_reg[x] as u16;
+            }
+            // FX29 -- Set I = location of sprite for digit Vx.
+            (0xF, _, 2, 9) => {
+                let x = digit2 as usize;
+                let c = self.v_reg[x] as u16;
+                self.i_reg = c * 5; // font is stored RAM using 5 bytes per character
+            }
             // 6XKK -- Set VX = KK
             (6, _, _, _) => {
                 let x = digit2 as usize;
