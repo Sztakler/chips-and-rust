@@ -205,8 +205,7 @@ impl Emu {
             // FX29 -- Set I = location of sprite for digit Vx.
             (0xF, _, 2, 9) => {
                 let x = digit2 as usize;
-                let c = self.v_reg[x] as u16;
-                self.i_reg = c * 5; // font is stored RAM using 5 bytes per character
+                self.i_reg = (self.v_reg[x] as u16) * 5; // font is stored RAM using 5 bytes per character
             }
             // 6XKK -- Set VX = KK
             (6, _, _, _) => {
@@ -1940,13 +1939,13 @@ mod tests {
         emu.ram[0x302] = 30;
         emu.ram[0x303] = 40;
 
-        emu.execute(0xF365); // F365 → wczytaj V0-V3
+        emu.execute(0xF365); // read V0-V3
 
         assert_eq!(emu.v_reg[0x0], 10);
         assert_eq!(emu.v_reg[0x1], 20);
         assert_eq!(emu.v_reg[0x2], 30);
         assert_eq!(emu.v_reg[0x3], 40);
-        assert_eq!(emu.i_reg, 0x300); // I nie zwiększone
+        assert_eq!(emu.i_reg, 0x300); // I unchanged
     }
 
     #[test]
@@ -1962,7 +1961,7 @@ mod tests {
         for i in 0..=0xF {
             assert_eq!(emu.v_reg[i], i as u8 * 10);
         }
-        assert_eq!(emu.i_reg, 0x500); // I bez zmian
+        assert_eq!(emu.i_reg, 0x500); // I unchanged
     }
 
     #[test]
@@ -1999,5 +1998,129 @@ mod tests {
         assert_eq!(emu.v_reg[0x2], 70);
         assert_eq!(emu.i_reg, 0x200);
         assert_eq!(emu.pc, 0x302);
+    }
+
+    #[test]
+    fn test_exa1_skip_when_key_not_pressed() {
+        let mut emu = Emu::new();
+        emu.pc = 0x200;
+        emu.ram[0x200] = 0xEA;
+        emu.ram[0x201] = 0xA1;
+        emu.v_reg[0xA] = 0x5;
+        emu.keys[5] = false;
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x204); // skip
+    }
+
+    #[test]
+    fn test_exa1_no_skip_when_key_pressed() {
+        let mut emu = Emu::new();
+        emu.pc = 0x300;
+        emu.ram[0x300] = 0xE4;
+        emu.ram[0x301] = 0xA1;
+        emu.v_reg[0x4] = 0xC;
+        emu.keys[0xC] = true;
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x302); // no skip
+    }
+
+    #[test]
+    fn test_exa1_no_skip_when_key_out_of_range() {
+        let mut emu = Emu::new();
+        emu.pc = 0x400;
+        emu.ram[0x400] = 0xE1;
+        emu.ram[0x401] = 0xA1;
+        emu.v_reg[0x1] = 0xFF;
+
+        emu.tick();
+
+        assert_eq!(emu.pc, 0x402);
+    }
+
+    #[test]
+    fn test_fx1e_add_basic() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x100;
+        emu.v_reg[0x3] = 0x45;
+
+        emu.execute(0xF31E);
+
+        assert_eq!(emu.i_reg, 0x145);
+    }
+
+    #[test]
+    fn test_fx1e_add_zero() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x200;
+        emu.v_reg[0x0] = 0x00;
+
+        emu.execute(0xF01E);
+
+        assert_eq!(emu.i_reg, 0x200);
+    }
+
+    #[test]
+    fn test_fx1e_add_max() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0xF00;
+        emu.v_reg[0xF] = 0xFF;
+
+        emu.execute(0xFF1E);
+
+        assert_eq!(emu.i_reg, 0xFFF); // wrap-around
+    }
+
+    #[test]
+    fn test_fx1e_multiple_adds() {
+        let mut emu = Emu::new();
+        emu.i_reg = 0x300;
+        emu.v_reg[0x1] = 0x10;
+        emu.v_reg[0x2] = 0x20;
+
+        emu.execute(0xF11E);
+        assert_eq!(emu.i_reg, 0x310);
+
+        emu.execute(0xF21E);
+        assert_eq!(emu.i_reg, 0x330);
+    }
+
+    #[test]
+    fn test_fx29_font_address_digit_0() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x0] = 0x0;
+        emu.execute(0xF029);
+        assert_eq!(emu.i_reg, 0x0);
+    }
+
+    #[test]
+    fn test_fx29_font_address_digit_5() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x5] = 0x5;
+        emu.execute(0xF529);
+        assert_eq!(emu.i_reg, 25); // 5 * 5 = 25
+    }
+
+    #[test]
+    fn test_fx29_font_address_digit_f() {
+        let mut emu = Emu::new();
+        emu.v_reg[0xF] = 0xF;
+        emu.execute(0xFF29);
+        assert_eq!(emu.i_reg, 75); // 15 * 5 = 75
+    }
+
+    #[test]
+    fn test_fx29_multiple_digits() {
+        let mut emu = Emu::new();
+        emu.v_reg[0x3] = 0x3;
+        emu.execute(0xF329);
+        assert_eq!(emu.i_reg, 15);
+
+        emu.v_reg[0xB] = 0xB;
+        emu.execute(0xFB29);
+        assert_eq!(emu.i_reg, 55);
     }
 }
