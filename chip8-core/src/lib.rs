@@ -113,23 +113,29 @@ impl Emu {
 
         #[allow(clippy::match_single_binding)]
         match (digit1, digit2, digit3, digit4) {
+            // 0000 -- No operation (NOP)
             (0, 0, 0, 0) => (),
+            // 00E0 -- Clears screen (CLS)
             (0, 0, 0xE, 0) => {
                 self.screen = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
             }
+            // 00EE -- Return from subroutine (RET)
             (0, 0, 0xE, 0xE) => {
                 let ret_addr = self.pop();
                 self.pc = ret_addr;
             }
+            // 1NNN -- Jump to location NNN (JMP)
             (1, _, _, _) => {
                 let nnn = op & 0x0FFF;
                 self.pc = nnn;
             }
+            // 2NNN -- Call subroutine at NNN (CALL)
             (2, _, _, _) => {
                 let nnn = op & 0x0FFF;
                 self.push(self.pc);
                 self.pc = nnn;
             }
+            // VXKK -- Skip next instruction if VX=KK
             (3, _, _, _) => {
                 let x = digit2 as usize;
                 let nn = (op & 0x00FF) as u8;
@@ -137,10 +143,12 @@ impl Emu {
                     self.pc += 2;
                 }
             }
+            // BNNN -- jump to location NNN + V0
             (0xB, _, _, _) => {
                 let nnn = op & 0x0FFF;
                 self.pc = (self.v_reg[0] as u16) + nnn;
             }
+            // 4XKK -- Skip next instruction if VX != kk
             (4, _, _, _) => {
                 let x = digit2 as usize;
                 let nn = op & 0x00FF;
@@ -148,6 +156,7 @@ impl Emu {
                     self.pc += 2;
                 }
             }
+            // 5XY0 -- Skip next instruction if VX = VY
             (5, _, _, 0) => {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
@@ -155,6 +164,7 @@ impl Emu {
                     self.pc += 2;
                 }
             }
+            // 9XY0 -- Skip next instruction if VX != VY
             (9, _, _, 0) => {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
@@ -162,6 +172,7 @@ impl Emu {
                     self.pc += 2;
                 }
             }
+            // EX9E -- Skip next instruction if key with the value of Vx is pressed
             (0xE, _, 9, 0xE) => {
                 let x = digit2 as usize;
                 let key_val = self.v_reg[x] as usize;
@@ -169,6 +180,7 @@ impl Emu {
                     self.pc += 2;
                 }
             }
+            // FX0A -- Wait for a key press, store the value of the key in VX
             (0xF, _, 0, 0xA) => {
                 let x = digit2 as usize;
                 if let Some(key) = (0..self.keys.len()).find(|&i| self.keys[i]) {
@@ -177,11 +189,13 @@ impl Emu {
                     self.pc -= 2;
                 }
             }
+            // 6XKK -- Set VX = KK
             (6, _, _, _) => {
                 let x = digit2 as usize;
                 let kk = (op & 0x00FF) as u8;
                 self.v_reg[x] = kk;
             }
+            // 7XKK -- Set VX = VX + KK
             (7, _, _, _) => {
                 let x = digit2 as usize;
                 let kk = (op & 0x00FF) as u8;
@@ -194,28 +208,37 @@ impl Emu {
                 let vy = self.v_reg[y];
 
                 match n {
+                    // 8XY0 -- Set VX = VY
                     0 => self.v_reg[x] = vy,
+                    // 8XY1 -- Set VX = VX OR VY
                     1 => self.v_reg[x] |= vy,
+                    // 8XY2 -- Set VX = VX AND VY
                     2 => self.v_reg[x] &= vy,
+                    // 8XY3 -- Set VX = VX XOR VY
                     3 => self.v_reg[x] ^= vy,
+                    // 8XY4 -- Set VX = VX + VY, set VF = carry
                     4 => {
                         let sum = vx as u16 + vy as u16;
                         self.v_reg[x] = sum as u8;
                         self.v_reg[0xF] = if sum > 0xFF { 1 } else { 0 };
                     }
+                    // 8XY5 -- Set VX = VX - VY, set VF = NOT borrow
                     5 => {
                         self.v_reg[0xF] = if vx >= vy { 1 } else { 0 };
                         self.v_reg[x] = vx.wrapping_sub(vy);
                     }
+                    // 8XY6 -- Set VX = VX SHR 1
                     6 => {
                         self.v_reg[x] = vy;
                         self.v_reg[0xF] = vy & 1;
                         self.v_reg[x] >>= 1;
                     }
+                    // 8XY7 -- Set VX = VY - VX, set VF = NOT borrow
                     7 => {
                         self.v_reg[0xF] = if vy >= vx { 1 } else { 0 };
                         self.v_reg[x] = vy.wrapping_sub(vx);
                     }
+                    // 8XYE -- Set VX SHL 1
                     0xE => {
                         self.v_reg[x] = vy;
                         self.v_reg[0xF] = (vy >> 7) & 1;
@@ -224,6 +247,7 @@ impl Emu {
                     _ => unimplemented!("Unimplemented 8XY{} opcode", n),
                 }
             }
+            // ANNN -- Set I = NNN
             (0xA, _, _, _) => {
                 let nnn = op & 0x0FFF;
                 self.i_reg = nnn;
