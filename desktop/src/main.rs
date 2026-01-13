@@ -51,10 +51,11 @@ fn main() -> Result<(), String> {
                 } => {
                     println!("Key down: {:?}", key);
                 }
-                Event::Window { win_event, .. } => {
-                    if let sdl2::event::WindowEvent::Resized(w, h) = win_event {
-                        println!("Window resized to {}x{}", w, h);
-                    }
+                Event::Window {
+                    win_event: sdl2::event::WindowEvent::Resized(w, h),
+                    ..
+                } => {
+                    println!("Window resized to {}x{}", w, h);
                 }
                 _ => {}
             }
