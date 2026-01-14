@@ -69,8 +69,14 @@ impl Emu {
         self.keys[index] = pressed;
     }
 
-    pub fn get_screen(&self) -> &[bool] {
+    pub fn get_screen(&self) -> &[bool; SCREEN_WIDTH * SCREEN_HEIGHT] {
         &self.screen
+    }
+
+    pub fn fill_screen_random(&mut self) {
+        for pixel in self.screen.iter_mut() {
+            *pixel = rand::random::<bool>();
+        }
     }
 
     pub fn reset(&mut self) {
