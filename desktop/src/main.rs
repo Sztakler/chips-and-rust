@@ -7,7 +7,20 @@ use std::time::Duration;
 
 use chip8_core::{Emu, SCREEN_HEIGHT, SCREEN_WIDTH};
 
+use clap::Parser;
 use serde::Deserialize;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about = "CHIP-8 Emulator in Rust")]
+struct Args {
+    #[arg(long)]
+    // Pixel color in RGB format (e.g. 255, 0, 0)
+    pixel_color: Option<String>,
+
+    #[arg(long)]
+    // Background color in RGB format (e.g. 255, 0, 0)
+    background_color: Option<String>,
+}
 
 #[derive(Deserialize)]
 struct Config {
@@ -93,9 +106,27 @@ impl Display {
     }
 }
 
+fn parse_color(color_str: Option<String>, default: (u8, u8, u8)) -> (u8, u8, u8) {
+    color_str
+        .and_then(|s| {
+            let parts: Vec<u8> = s.split(',').filter_map(|s| s.parse().ok()).collect();
+            if parts.len() == 3 {
+                Some((parts[0], parts[1], parts[2]))
+            } else {
+                None
+            }
+        })
+        .unwrap_or(default)
+}
+
 fn main() -> Result<(), String> {
+    let args = Args::parse();
+    let mut config = Config::load();
+    config.pixel_color = parse_color(args.pixel_color, config.pixel_color);
+    config.background_color = parse_color(args.background_color, config.background_color);
+
     let mut emu = Emu::new();
-    let config = Config::load();
+
     let display = Display {
         pixel_color: Color::RGB(
             config.pixel_color.0,
