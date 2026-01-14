@@ -5,6 +5,9 @@ use sdl2::rect::Rect;
 use sdl2::render::WindowCanvas;
 use std::time::Duration;
 
+use std::fs::File;
+use std::io::Read;
+
 use chip8_core::{Emu, SCREEN_HEIGHT, SCREEN_WIDTH};
 
 use clap::Parser;
@@ -20,6 +23,8 @@ struct Args {
     #[arg(long)]
     // Background color in RGB format (e.g. 255, 0, 0)
     background_color: Option<String>,
+
+    rom_path: String,
 }
 
 #[derive(Deserialize)]
@@ -126,6 +131,17 @@ fn main() -> Result<(), String> {
     config.background_color = parse_color(args.background_color, config.background_color);
 
     let mut emu = Emu::new();
+
+    let mut rom_file = File::open(&args.rom_path)
+        .map_err(|e| format!("Error while opening file ROM ({}): {}", &args.rom_path, e))?;
+
+    let mut rom_buffer = Vec::new();
+    rom_file
+        .read_to_end(&mut rom_buffer)
+        .map_err(|e| format!("Error while loading ROM: {}", e))?;
+
+    emu.load_rom(&rom_buffer);
+    println!("Loaded ROM: {} ({}) bytes", args.rom_path, rom_buffer.len());
 
     let display = Display {
         pixel_color: Color::RGB(
