@@ -5,31 +5,7 @@ use sdl2::rect::Rect;
 use sdl2::render::WindowCanvas;
 use std::time::Duration;
 
-use chip8_core::Emu;
-
-fn draw_chessboard(canvas: &mut WindowCanvas) -> Result<(), String> {
-    const CELL_SIZE: i32 = 1;
-
-    for y in 0..(32 / CELL_SIZE) {
-        for x in 0..(64 / CELL_SIZE) {
-            let color = if (x + y) % 2 == 0 {
-                Color::RGB(40, 40, 40)
-            } else {
-                Color::RGB(90, 90, 90)
-            };
-
-            canvas.set_draw_color(color);
-            canvas.fill_rect(Rect::new(
-                x * CELL_SIZE,
-                y * CELL_SIZE,
-                CELL_SIZE as u32,
-                CELL_SIZE as u32,
-            ))?;
-        }
-    }
-
-    Ok(())
-}
+use chip8_core::{Emu, SCREEN_HEIGHT, SCREEN_WIDTH};
 
 fn map_keycode(keycode: Keycode) -> Option<usize> {
     match keycode {
@@ -56,8 +32,46 @@ fn map_keycode(keycode: Keycode) -> Option<usize> {
     }
 }
 
+struct Display {
+    background_color: Color,
+    pixel_color: Color,
+}
+
+impl Display {
+    pub fn new() -> Self {
+        Self {
+            pixel_color: Color::RGB(0, 255, 0),
+            background_color: Color::RGB(0, 0, 0),
+        }
+    }
+
+    pub fn draw(
+        &self,
+        canvas: &mut WindowCanvas,
+        screen_data: &[bool; SCREEN_WIDTH * SCREEN_HEIGHT],
+    ) -> Result<(), String> {
+        canvas.set_draw_color(self.background_color);
+        canvas.clear();
+
+        canvas.set_draw_color(self.pixel_color);
+
+        let range = 0..(SCREEN_WIDTH * SCREEN_HEIGHT);
+        for i in range {
+            if screen_data[i] {
+                let x = (i % SCREEN_WIDTH) as i32;
+                let y = (i / SCREEN_WIDTH) as i32;
+
+                canvas.fill_rect(Rect::new(x, y, 1, 1))?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
 fn main() -> Result<(), String> {
     let mut emu = Emu::new();
+    let display = Display::new();
 
     let sdl_context = sdl2::init().map_err(|e| format!("SDL2 init failed: {}", e))?;
     let video_subsystem = sdl_context
@@ -124,10 +138,8 @@ fn main() -> Result<(), String> {
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
 
-        draw_chessboard(&mut canvas)?;
-
-        canvas.set_draw_color(Color::RGB(180, 40, 40));
-        canvas.draw_rect(Rect::new(0, 0, 64, 32))?;
+        emu.fill_screen_random();
+        display.draw(&mut canvas, emu.get_screen())?;
 
         canvas.present();
 
