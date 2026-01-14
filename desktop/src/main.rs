@@ -5,7 +5,7 @@ use sdl2::rect::Rect;
 use sdl2::render::WindowCanvas;
 use std::time::Duration;
 
-fn draw_chessboard(canvas: &mut WindowCanvas) {
+fn draw_chessboard(canvas: &mut WindowCanvas) -> Result<(), String> {
     const CELL_SIZE: i32 = 1;
 
     for y in 0..(32 / CELL_SIZE) {
@@ -17,14 +17,16 @@ fn draw_chessboard(canvas: &mut WindowCanvas) {
             };
 
             canvas.set_draw_color(color);
-            let _ = canvas.fill_rect(Rect::new(
+            canvas.fill_rect(Rect::new(
                 x * CELL_SIZE,
                 y * CELL_SIZE,
                 CELL_SIZE as u32,
                 CELL_SIZE as u32,
-            ));
+            ))?;
         }
     }
+
+    Ok(())
 }
 
 fn main() -> Result<(), String> {
@@ -84,7 +86,7 @@ fn main() -> Result<(), String> {
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
 
-        draw_chessboard(&mut canvas);
+        draw_chessboard(&mut canvas)?;
 
         canvas.set_draw_color(Color::RGB(180, 40, 40));
         canvas.draw_rect(Rect::new(0, 0, 64, 32))?;
