@@ -65,20 +65,6 @@ impl Emu {
         new_emu
     }
 
-    pub fn set_key(&mut self, index: usize, pressed: bool) {
-        self.keys[index] = pressed;
-    }
-
-    pub fn get_screen(&self) -> &[bool; SCREEN_WIDTH * SCREEN_HEIGHT] {
-        &self.screen
-    }
-
-    pub fn fill_screen_random(&mut self) {
-        for pixel in self.screen.iter_mut() {
-            *pixel = rand::random::<bool>();
-        }
-    }
-
     pub fn reset(&mut self) {
         self.pc = START_ADDR;
         self.ram = [0; RAM_SIZE];
