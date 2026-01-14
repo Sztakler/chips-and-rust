@@ -17,7 +17,7 @@ fn draw_chessboard(canvas: &mut WindowCanvas) {
             };
 
             canvas.set_draw_color(color);
-            canvas.fill_rect(Rect::new(
+            let _ = canvas.fill_rect(Rect::new(
                 x * CELL_SIZE,
                 y * CELL_SIZE,
                 CELL_SIZE as u32,
@@ -52,9 +52,9 @@ fn main() -> Result<(), String> {
         .map_err(|e| format!("Canvas creation failed: {}", e))?;
 
     let _ = canvas.set_logical_size(WINDOW_WIDTH, WINDOW_HEIGHT);
-    sdl2::hint::set("SDL_RENDER_SCALE_QUALITY", "nearest"); // sharp pixels
+    sdl2::hint::set("SDL_RENDER_SCALE_QUALITY", "nearest");
 
-    canvas.set_draw_color(Color::RGB(0, 255, 0));
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
     canvas.present();
 
@@ -77,13 +77,6 @@ fn main() -> Result<(), String> {
                 } => {
                     println!("Key down: {:?}", key);
                 }
-                Event::Window { win_event, .. } => match win_event {
-                    sdl2::event::WindowEvent::Resized(..)
-                    | sdl2::event::WindowEvent::SizeChanged(..) => {
-                        println!("Resised window");
-                    }
-                    _ => {}
-                },
                 _ => {}
             }
         }
