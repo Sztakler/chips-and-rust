@@ -5,3 +5,7 @@ edition = "2024"
 
 [dependencies]
 chip8-core = { path = "../chip8-core" }
+sdl2 = "^0.38.0"
+serde = { version = "^1.0", features = ["derive"] }
+toml = "^0.9"
+clap = { version = "^4.0", features = ["derive"]}
