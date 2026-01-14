@@ -65,6 +65,14 @@ impl Emu {
         new_emu
     }
 
+    pub fn set_key(&mut self, index: usize, pressed: bool) {
+        self.keys[index] = pressed;
+    }
+
+    pub fn get_screen(&self) -> &[bool] {
+        &self.screen
+    }
+
     pub fn reset(&mut self) {
         self.pc = START_ADDR;
         self.ram = [0; RAM_SIZE];

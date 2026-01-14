@@ -5,6 +5,8 @@ use sdl2::rect::Rect;
 use sdl2::render::WindowCanvas;
 use std::time::Duration;
 
+use chip8_core::Emu;
+
 fn draw_chessboard(canvas: &mut WindowCanvas) -> Result<(), String> {
     const CELL_SIZE: i32 = 1;
 
@@ -29,7 +31,34 @@ fn draw_chessboard(canvas: &mut WindowCanvas) -> Result<(), String> {
     Ok(())
 }
 
+fn map_keycode(keycode: Keycode) -> Option<usize> {
+    match keycode {
+        Keycode::Num1 => Some(0x1),
+        Keycode::Num2 => Some(0x2),
+        Keycode::Num3 => Some(0x3),
+        Keycode::Num4 => Some(0xC),
+
+        Keycode::Q => Some(0x4),
+        Keycode::W => Some(0x5),
+        Keycode::E => Some(0x6),
+        Keycode::R => Some(0xD),
+
+        Keycode::A => Some(0x7),
+        Keycode::S => Some(0x8),
+        Keycode::D => Some(0x9),
+        Keycode::F => Some(0xE),
+
+        Keycode::Z => Some(0x8),
+        Keycode::X => Some(0x9),
+        Keycode::C => Some(0x0),
+        Keycode::V => Some(0xF),
+        _ => None,
+    }
+}
+
 fn main() -> Result<(), String> {
+    let mut emu = Emu::new();
+
     let sdl_context = sdl2::init().map_err(|e| format!("SDL2 init failed: {}", e))?;
     let video_subsystem = sdl_context
         .video()
@@ -77,7 +106,16 @@ fn main() -> Result<(), String> {
                 Event::KeyDown {
                     keycode: Some(key), ..
                 } => {
-                    println!("Key down: {:?}", key);
+                    if let Some(index) = map_keycode(key) {
+                        emu.set_key(index, true);
+                    }
+                }
+                Event::KeyUp {
+                    keycode: Some(key), ..
+                } => {
+                    if let Some(index) = map_keycode(key) {
+                        emu.set_key(index, false);
+                    }
                 }
                 _ => {}
             }
