@@ -79,6 +79,17 @@ impl Emu {
         }
     }
 
+    pub fn load_rom(&mut self, data: &[u8]) {
+        let start = START_ADDR as usize;
+        let end = START_ADDR as usize + data.len();
+
+        if end > self.ram.len() {
+            panic!("ROM is too big for CHIP-8 memory!");
+        }
+
+        self.ram[start..end].copy_from_slice(data);
+    }
+
     pub fn reset(&mut self) {
         self.pc = START_ADDR;
         self.ram = [0; RAM_SIZE];
