@@ -7,6 +7,24 @@ use std::time::Duration;
 
 use chip8_core::{Emu, SCREEN_HEIGHT, SCREEN_WIDTH};
 
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct Config {
+    pixel_color: (u8, u8, u8),
+    background_color: (u8, u8, u8),
+}
+
+impl Config {
+    fn load() -> Self {
+        let config_str = std::fs::read_to_string("config.toml").unwrap_or_else(|_| {
+            "pixel_color = [0, 255, 0]\nbackground_color = [0, 0, 0]".to_string()
+        });
+
+        toml::from_str(&config_str).expect("Error in formatting of the config.toml file")
+    }
+}
+
 fn map_keycode(keycode: Keycode) -> Option<usize> {
     match keycode {
         Keycode::Num1 => Some(0x1),
@@ -35,6 +53,12 @@ fn map_keycode(keycode: Keycode) -> Option<usize> {
 struct Display {
     background_color: Color,
     pixel_color: Color,
+}
+
+impl Default for Display {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Display {
@@ -71,7 +95,19 @@ impl Display {
 
 fn main() -> Result<(), String> {
     let mut emu = Emu::new();
-    let display = Display::new();
+    let config = Config::load();
+    let display = Display {
+        pixel_color: Color::RGB(
+            config.pixel_color.0,
+            config.pixel_color.1,
+            config.pixel_color.2,
+        ),
+        background_color: Color::RGB(
+            config.background_color.0,
+            config.background_color.1,
+            config.background_color.2,
+        ),
+    };
 
     let sdl_context = sdl2::init().map_err(|e| format!("SDL2 init failed: {}", e))?;
     let video_subsystem = sdl_context
