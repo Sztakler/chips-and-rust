@@ -52,6 +52,7 @@ fn main() -> Result<(), String> {
         .map_err(|e| format!("Canvas creation failed: {}", e))?;
 
     let _ = canvas.set_logical_size(WINDOW_WIDTH, WINDOW_HEIGHT);
+    sdl2::hint::set("SDL_RENDER_SCALE_QUALITY", "nearest"); // sharp pixels
 
     canvas.set_draw_color(Color::RGB(0, 255, 0));
     canvas.clear();
