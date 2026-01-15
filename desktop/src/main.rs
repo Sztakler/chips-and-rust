@@ -14,6 +14,7 @@ use clap::Parser;
 use serde::Deserialize;
 
 mod audio;
+use audio::AudioSystem;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "CHIP-8 Emulator in Rust")]
@@ -192,6 +193,8 @@ fn main() -> Result<(), String> {
         .event_pump()
         .map_err(|e| format!("Event pump failed: {}", e))?;
 
+    let audio_system = AudioSystem::new(&sdl_context)?;
+
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -224,6 +227,8 @@ fn main() -> Result<(), String> {
         canvas.clear();
 
         emu.fill_screen_random();
+        audio_system.sync(emu.get_sound_timer());
+
         display.draw(&mut canvas, emu.get_screen())?;
 
         canvas.present();
