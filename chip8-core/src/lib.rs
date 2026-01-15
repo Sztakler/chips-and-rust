@@ -388,9 +388,6 @@ impl Emu {
             self.dt -= 1;
         }
         if self.st > 0 {
-            if self.st == 1 {
-                // TODO: Emit beep sound
-            }
             self.st -= 1;
         }
     }
