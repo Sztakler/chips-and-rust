@@ -73,6 +73,10 @@ impl Emu {
         &self.screen
     }
 
+    pub fn get_sound_timer(&self) -> u8 {
+        self.st
+    }
+
     pub fn fill_screen_random(&mut self) {
         for pixel in self.screen.iter_mut() {
             *pixel = rand::random::<bool>();
@@ -384,9 +388,6 @@ impl Emu {
             self.dt -= 1;
         }
         if self.st > 0 {
-            if self.st == 1 {
-                // TODO: Emit beep sound
-            }
             self.st -= 1;
         }
     }
