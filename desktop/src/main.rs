@@ -13,6 +13,8 @@ use chip8_core::{Emu, SCREEN_HEIGHT, SCREEN_WIDTH};
 use clap::Parser;
 use serde::Deserialize;
 
+mod audio;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about = "CHIP-8 Emulator in Rust")]
 struct Args {
