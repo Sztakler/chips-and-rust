@@ -226,9 +226,12 @@ fn main() -> Result<(), String> {
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
 
-        emu.fill_screen_random();
-        audio_system.sync(emu.get_sound_timer());
+        // Emulate in 60 (FPS) * 10 (clocks per video frame) = 600Hz
+        for _ in 0..10 {
+            emu.tick();
+        }
 
+        audio_system.sync(emu.get_sound_timer());
         display.draw(&mut canvas, emu.get_screen())?;
 
         canvas.present();
